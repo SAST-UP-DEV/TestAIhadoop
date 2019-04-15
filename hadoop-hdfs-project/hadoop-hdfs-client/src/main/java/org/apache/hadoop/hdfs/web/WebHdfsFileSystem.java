@@ -1185,7 +1185,6 @@ public class WebHdfsFileSystem extends FileSystem
     ).run();
   }
 
-  @SuppressWarnings("deprecation")
   @Override
   public void rename(final Path src, final Path dst,
       final Options.Rename... options) throws IOException {

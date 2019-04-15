@@ -102,7 +102,9 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FSDataOutputStreamBuilder;
 import org.apache.hadoop.fs.Globber;
 import org.apache.hadoop.fs.Options;
+import org.apache.hadoop.fs.ParentNotDirectoryException;
 import org.apache.hadoop.fs.impl.OpenFileParameters;
+import org.apache.hadoop.fs.impl.FileSystemRename3Action;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.s3a.audit.AuditSpanS3A;
 import org.apache.hadoop.fs.s3a.auth.SignerManager;
@@ -128,6 +130,7 @@ import org.apache.hadoop.fs.s3a.impl.PutObjectOptions;
 import org.apache.hadoop.fs.s3a.impl.RenameOperation;
 import org.apache.hadoop.fs.s3a.impl.RequestFactoryImpl;
 import org.apache.hadoop.fs.s3a.impl.S3AMultipartUploaderBuilder;
+import org.apache.hadoop.fs.s3a.impl.S3ARenameCallbacks;
 import org.apache.hadoop.fs.s3a.impl.StatusProbeEnum;
 import org.apache.hadoop.fs.s3a.impl.StoreContext;
 import org.apache.hadoop.fs.s3a.impl.StoreContextBuilder;
@@ -206,6 +209,8 @@ import static org.apache.hadoop.fs.CommonConfigurationKeys.IOSTATISTICS_LOGGING_
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IOSTATISTICS_LOGGING_LEVEL_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_KEY;
+import static org.apache.hadoop.fs.FSExceptionMessages.RENAME_DEST_PARENT_NOT_DIRECTORY;
+import static org.apache.hadoop.fs.impl.AbstractFSBuilderImpl.rejectUnknownMandatoryKeys;
 import static org.apache.hadoop.fs.impl.PathCapabilitiesSupport.validatePathCapabilityArgs;
 import static org.apache.hadoop.fs.s3a.Constants.*;
 import static org.apache.hadoop.fs.s3a.Invoker.*;
@@ -2000,7 +2005,6 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
         + "by S3AFileSystem");
   }
 
-
   /**
    * Renames Path src to Path dst.  Can take place on local fs
    * or remote DFS.
@@ -2178,6 +2182,54 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
         new OperationCallbacksImpl(),
         pageSize);
     return renameOperation.execute();
+  }
+
+  /**
+   *
+   * @param source path to be renamed
+   * @param dest new path after rename
+   * @param options rename options.
+   * @throws IOException
+   */
+  @Override
+  public void rename(final Path source,
+      final Path dest,
+      final Options.Rename... options) throws IOException {
+    Path src = qualify(source);
+    Path dst = qualify(dest);
+
+    LOG.debug("Rename path {} to {}", src, dst);
+    entryPoint(INVOCATION_RENAME);
+    super.rename(source, dest, options);
+  }
+
+  /**
+   * Return the S3A rename callbacks; mocking tests
+   * may wish to override.
+   */
+  protected FileSystemRename3Action.RenameCallbacks createRenameCallbacks() {
+    return new S3ARenameCallbacks(
+        createStoreContext(),
+        operationCallbacks,
+        pageSize,
+        new S3ARenameCallbacks.Probes() {
+          @Override
+          public S3AFileStatus stat(final Path f,
+              final boolean needEmptyDirectoryFlag,
+              final Set<StatusProbeEnum> probes) throws IOException {
+            return innerGetFileStatus(f, needEmptyDirectoryFlag, probes);
+          }
+
+          @Override
+          public boolean isDir(final Path path) throws IOException {
+            return isDirectory(path);
+          }
+
+          @Override
+          public boolean dirHasChildren(final Path path) throws IOException {
+            return listStatusIterator(path).hasNext();
+          }
+        });
   }
 
   @Override public Token<? extends TokenIdentifier> getFsDelegationToken()
