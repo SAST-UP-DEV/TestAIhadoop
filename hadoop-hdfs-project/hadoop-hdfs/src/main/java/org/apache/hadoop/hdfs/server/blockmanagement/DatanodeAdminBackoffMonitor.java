@@ -24,6 +24,7 @@ import org.apache.hadoop.hdfs.server.namenode.INodeFile;
 import org.apache.hadoop.hdfs.server.namenode.INodeId;
 import org.apache.hadoop.hdfs.util.LightWeightHashSet;
 import org.apache.hadoop.hdfs.util.LightWeightLinkedSet;
+import org.apache.hadoop.classification.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.HashMap;
@@ -32,8 +33,6 @@ import java.util.Map;
 import java.util.List;
 import java.util.Iterator;
 import java.util.LinkedList;
-import java.util.ArrayDeque;
-import java.util.Queue;
 import java.util.stream.Collectors;
 
 /**
@@ -72,16 +71,10 @@ public class DatanodeAdminBackoffMonitor extends DatanodeAdminMonitorBase
       outOfServiceNodeBlocks = new HashMap<>();
 
   /**
-   * Any nodes where decommission or maintenance has been cancelled are added
-   * to this queue for later processing.
-   */
-  private final Queue<DatanodeDescriptor> cancelledNodes = new ArrayDeque<>();
-
-  /**
-   * The numbe of blocks to process when moving blocks to pendingReplication
+   * The number of blocks to process when moving blocks to pendingReplication
    * before releasing and reclaiming the namenode lock.
    */
-  private int blocksPerLock;
+  private volatile int blocksPerLock;
 
   /**
    * The number of blocks that have been checked on this tick.
@@ -90,7 +83,7 @@ public class DatanodeAdminBackoffMonitor extends DatanodeAdminMonitorBase
   /**
    * The maximum number of blocks to hold in PendingRep at any time.
    */
-  private int pendingRepLimit;
+  private volatile int pendingRepLimit;
 
   /**
    * The list of blocks which have been placed onto the replication queue
@@ -151,7 +144,7 @@ public class DatanodeAdminBackoffMonitor extends DatanodeAdminMonitorBase
   @Override
   public void stopTrackingNode(DatanodeDescriptor dn) {
     getPendingNodes().remove(dn);
-    cancelledNodes.add(dn);
+    getCancelledNodes().add(dn);
   }
 
   @Override
@@ -232,7 +225,7 @@ public class DatanodeAdminBackoffMonitor extends DatanodeAdminMonitorBase
           "in maintenance or transitioning state. {} nodes pending. {} " +
           "nodes waiting to be cancelled.",
           numBlocksChecked, outOfServiceNodeBlocks.size(), getPendingNodes().size(),
-          cancelledNodes.size());
+          getCancelledNodes().size());
     }
   }
 
@@ -259,8 +252,8 @@ public class DatanodeAdminBackoffMonitor extends DatanodeAdminMonitorBase
    * write lock to prevent the cancelledNodes list being modified externally.
    */
   private void processCancelledNodes() {
-    while(!cancelledNodes.isEmpty()) {
-      DatanodeDescriptor dn = cancelledNodes.poll();
+    while(!getCancelledNodes().isEmpty()) {
+      DatanodeDescriptor dn = getCancelledNodes().poll();
       outOfServiceNodeBlocks.remove(dn);
       pendingRep.remove(dn);
     }
@@ -807,6 +800,26 @@ public class DatanodeAdminBackoffMonitor extends DatanodeAdminMonitorBase
       return true;
     }
     return false;
+  }
+
+  @VisibleForTesting
+  @Override
+  public int getPendingRepLimit() {
+    return pendingRepLimit;
+  }
+
+  public void setPendingRepLimit(int pendingRepLimit) {
+    this.pendingRepLimit = pendingRepLimit;
+  }
+
+  @VisibleForTesting
+  @Override
+  public int getBlocksPerLock() {
+    return blocksPerLock;
+  }
+
+  public void setBlocksPerLock(int blocksPerLock) {
+    this.blocksPerLock = blocksPerLock;
   }
 
   static class BlockStats {

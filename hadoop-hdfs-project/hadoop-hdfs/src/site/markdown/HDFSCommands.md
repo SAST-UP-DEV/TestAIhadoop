@@ -30,7 +30,7 @@ Hadoop has an option parsing framework that employs parsing generic options as w
 |:---- |:---- |
 | SHELL\_OPTIONS | The common set of shell options. These are documented on the [Commands Manual](../../hadoop-project-dist/hadoop-common/CommandsManual.html#Shell_Options) page. |
 | GENERIC\_OPTIONS | The common set of options supported by multiple commands. See the Hadoop [Commands Manual](../../hadoop-project-dist/hadoop-common/CommandsManual.html#Generic_Options) for more information. |
-| COMMAND COMMAND\_OPTIONS | Various commands with their options are described in the following sections. The commands have been grouped into [User Commands](#User_Commands) and [Administration Commands](#Administration_Commands). |
+| COMMAND\_OPTIONS | Various commands with their options are described in the following sections. The commands have been grouped into [User Commands](#User_Commands) and [Administration Commands](#Administration_Commands). |
 
 User Commands
 -------------
@@ -227,6 +227,9 @@ Usage: `hdfs oiv [OPTIONS] -i INPUT_FILE`
 | `-step` *size* | Specify the granularity of the distribution in bytes (2MB by default). This option is used with FileDistribution processor. |
 | `-format` | Format the output result in a human-readable fashion rather than a number of bytes. (false by default). This option is used with FileDistribution processor. |
 | `-delimiter` *arg* | Delimiting string to use with Delimited processor. |
+| `-sp` | Whether to print Storage policy(default is false). This option is used with Delimited processor only. |
+| `-ec` | Whether to print Erasure coding policy(default is false). This option is used with Delimited processor only. |
+| `-m`,`--multiThread` *arg* | Specify multiThread to process sub-sections. This option is used with Delimited processor only. |
 | `-t`,`--temp` *temporary dir* | Use temporary dir to cache intermediate result to generate Delimited outputs. If not set, Delimited processor constructs the namespace in memory before outputting text. |
 | `-h`,`--help` | Display the tool usage and help information and exit. |
 
@@ -374,7 +377,7 @@ Usage:
         hdfs dfsadmin [-refreshSuperUserGroupsConfiguration]
         hdfs dfsadmin [-refreshCallQueue]
         hdfs dfsadmin [-refresh <host:ipc_port> <key> [arg1..argn]]
-        hdfs dfsadmin [-reconfig <namenode|datanode> <host:ipc_port> <start |status |properties>]
+        hdfs dfsadmin [-reconfig <namenode|datanode> <host:ipc_port|livenodes> <start |status |properties>]
         hdfs dfsadmin [-printTopology]
         hdfs dfsadmin [-refreshNamenodes datanodehost:port]
         hdfs dfsadmin [-getVolumeReport datanodehost:port]
@@ -412,7 +415,7 @@ Usage:
 | `-refreshSuperUserGroupsConfiguration` | Refresh superuser proxy groups mappings |
 | `-refreshCallQueue` | Reload the call queue from config. |
 | `-refresh` \<host:ipc\_port\> \<key\> [arg1..argn] | Triggers a runtime-refresh of the resource specified by \<key\> on \<host:ipc\_port\>. All other args after are sent to the host. |
-| `-reconfig` \<datanode \|namenode\> \<host:ipc\_port\> \<start\|status\|properties\> | Starts reconfiguration or gets the status of an ongoing reconfiguration, or gets a list of reconfigurable properties. The second parameter specifies the node type. |
+| `-reconfig` \<datanode \|namenode\> \<host:ipc\_port\|livenodes> \<start\|status\|properties\> | Starts reconfiguration or gets the status of an ongoing reconfiguration, or gets a list of reconfigurable properties. The second parameter specifies the node type. The third parameter specifies host address. For start or status, datanode supports livenodes as third parameter, which will start or retrieve reconfiguration on all live datanodes. |
 | `-printTopology` | Print a tree of the racks and their nodes as reported by the Namenode |
 | `-refreshNamenodes` datanodehost:port | For the given datanode, reloads the configuration files, stops serving the removed block-pools and starts serving new block-pools. |
 | `-getVolumeReport` datanodehost:port | For the given datanode, get the volume report. |
