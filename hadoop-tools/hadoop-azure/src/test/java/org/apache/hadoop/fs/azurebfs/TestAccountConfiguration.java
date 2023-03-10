@@ -72,7 +72,6 @@ public class TestAccountConfiguration {
   private static final List<String> CONFIG_KEYS =
       Collections.unmodifiableList(Arrays.asList(
           FS_AZURE_ACCOUNT_OAUTH_CLIENT_ENDPOINT,
-          FS_AZURE_ACCOUNT_OAUTH_CLIENT_ID,
           FS_AZURE_ACCOUNT_OAUTH_CLIENT_SECRET));
 
   @Test
