@@ -18,6 +18,7 @@
 package org.apache.hadoop.hdfs.server.namenode.ha;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.logging.LogCapturer;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.thirdparty.com.google.common.base.Joiner;
 import java.io.IOException;
@@ -75,8 +76,8 @@ public class TestObserverReadProxyProvider {
   private final static long SLOW_RESPONSE_SLEEP_TIME = TimeUnit.SECONDS.toMillis(5); // 5 s
   private final static long NAMENODE_HA_STATE_PROBE_TIMEOUT_SHORT = TimeUnit.SECONDS.toMillis(2);
   private final static long NAMENODE_HA_STATE_PROBE_TIMEOUT_LONG = TimeUnit.SECONDS.toMillis(25);
-  private final GenericTestUtils.LogCapturer proxyLog =
-      GenericTestUtils.LogCapturer.captureLogs(ObserverReadProxyProvider.LOG);
+  private final LogCapturer proxyLog =
+      LogCapturer.captureLogs(ObserverReadProxyProvider.LOG);
 
   private static final LocatedBlock[] EMPTY_BLOCKS = new LocatedBlock[0];
   private String ns;
