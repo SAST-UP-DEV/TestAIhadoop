@@ -683,7 +683,7 @@ function signartifacts
       exit 1
     fi
   fi
-}
+}1
 
 # find root of the source tree
 BIN=$(hadoop_abs "${BASH_SOURCE:-$0}")

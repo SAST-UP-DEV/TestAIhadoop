@@ -363,8 +363,9 @@ org.objenesis:objenesis:2.6
 org.xerial.snappy:snappy-java:1.1.10.4
 org.yaml:snakeyaml:2.0
 org.wildfly.openssl:wildfly-openssl:1.1.3.Final
-software.amazon.awssdk:bundle:jar:2.23.19
 
+In distributions which include the aws V2 sdk:
+software.amazon.awssdk:bundle:jar:2.23.19
 
 --------------------------------------------------------------------------------
 This product bundles various third-party components under other open source
