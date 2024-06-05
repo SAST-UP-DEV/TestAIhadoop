@@ -27,6 +27,7 @@ import org.apache.hadoop.hdfs.server.federation.resolver.RemoteLocation;
 import org.apache.hadoop.hdfs.server.federation.router.async.ApplyFunction;
 import org.apache.hadoop.hdfs.server.federation.router.async.AsyncApplyFunction;
 import org.apache.hadoop.hdfs.server.federation.router.async.AsyncCatchFunction;
+import org.apache.hadoop.ipc.Client;
 import org.apache.hadoop.ipc.ObserverRetryOnActiveException;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.RetriableException;
@@ -51,6 +52,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -65,9 +67,9 @@ import static org.apache.hadoop.hdfs.server.federation.router.async.AsyncUtil.as
 import static org.apache.hadoop.hdfs.server.federation.router.async.AsyncUtil.asyncCurrent;
 import static org.apache.hadoop.hdfs.server.federation.router.async.AsyncUtil.asyncFinally;
 import static org.apache.hadoop.hdfs.server.federation.router.async.AsyncUtil.asyncForEach;
-import static org.apache.hadoop.hdfs.server.federation.router.async.AsyncUtil.asyncReturn;
 import static org.apache.hadoop.hdfs.server.federation.router.async.AsyncUtil.asyncThrowException;
 import static org.apache.hadoop.hdfs.server.federation.router.async.AsyncUtil.asyncTry;
+import static org.apache.hadoop.hdfs.server.federation.router.async.AsyncUtil.syncReturn;
 
 public class RouterAsyncRpcClient extends RouterRpcClient{
   private static final Logger LOG =
@@ -106,7 +108,7 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
         Boolean.class);
     asyncApply((ApplyFunction<Map<T, Boolean>, Object>)
         results -> results.containsValue(true));
-    return asyncReturn(Boolean.class);
+    return (boolean) getFutureResult();
   }
 
   @Override
@@ -128,7 +130,7 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
       invokeMethodAsync(ugi, (List<FederationNamenodeContext>) namenodes,
           useObserver, protocol, method, params);
     }, RouterRpcServer.getAsyncRouterHandler());
-    return asyncReturn(Object.class);
+    return getFutureResult();
   }
 
   @SuppressWarnings("checkstyle:MethodLength")
@@ -308,7 +310,9 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
       int retryCount, final Method method,
       final Object obj, final Object... params) {
     try {
+      Client.setAsynchronousMode(true);
       method.invoke(obj, params);
+      Client.setAsynchronousMode(false);
       asyncCatch((AsyncCatchFunction<Object, Throwable>) (o, e) -> {
         if (e instanceof IOException) {
           IOException ioe = (IOException) e;
@@ -355,7 +359,7 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
       Object expectedResultValue) throws IOException {
     invokeSequential(remoteMethod, locations, expectedResultClass, expectedResultValue);
     asyncApply((ApplyFunction<RemoteResult, Object>) result -> result.getResult());
-    return asyncReturn(expectedResultClass);
+    return (T) getFutureResult();
   }
 
   @Override
@@ -450,7 +454,7 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
       @SuppressWarnings("unchecked") T ret = (T) firstResult[0];
       return new RemoteResult<>(locations.get(0), ret);
     });
-    return asyncReturn(RemoteResult.class);
+    return (RemoteResult) getFutureResult();
   }
 
   @Override
@@ -491,7 +495,7 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
       }
       return ret;
     });
-    return asyncReturn(Map.class);
+    return (Map<T, R>) getFutureResult();
   }
 
   @Override
@@ -530,7 +534,7 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
         releasePermit(ns, ugi, method, controller);
         return o;
       });
-      return null;
+      return (List<RemoteResult<T, R>>) getFutureResult();
     }
 
     if (rpcMonitor != null) {
@@ -606,7 +610,7 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
           releasePermit(CONCURRENT_NS, ugi, method, controller);
           return results;
         });
-    return asyncReturn(List.class);
+    return (List<RemoteResult<T, R>>) getFutureResult();
   }
 
   @Override
@@ -628,8 +632,20 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
       releasePermit(nsId, ugi, method, controller);
       return o;
     });
-    return asyncReturn(Object.class);
+    return getFutureResult();
   }
 
-
+  // TODO: only test!!!
+  private Object getFutureResult() throws IOException {
+    try {
+      return syncReturn(Object.class);
+    } catch (ExecutionException | CompletionException e) {
+      throw (IOException) e.getCause();
+    } catch (IOException e) {
+      throw e;
+    } catch (Exception e) {
+      LOG.error("Unexpected exception", e);
+      return null;
+    }
+  }
 }

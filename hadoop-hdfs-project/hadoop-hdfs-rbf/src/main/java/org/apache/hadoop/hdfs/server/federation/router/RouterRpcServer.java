@@ -305,7 +305,7 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
         DFS_ROUTER_HANDLER_QUEUE_SIZE_DEFAULT);
 
     this.enableAsync = conf.getBoolean(DFS_ROUTER_RPC_ENABLE_ASYNC,
-        DFS_ROUTER_RPC_ENABLE_ASYNC_DEFAULT);
+        true);
     LOG.info("Router enable async {}", this.enableAsync);
     if (this.enableAsync) {
       initAsyncThreadPool();
