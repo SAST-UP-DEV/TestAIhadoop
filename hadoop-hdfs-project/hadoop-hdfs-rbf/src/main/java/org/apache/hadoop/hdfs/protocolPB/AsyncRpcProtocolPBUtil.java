@@ -18,11 +18,11 @@
 
 package org.apache.hadoop.hdfs.protocolPB;
 
+import org.apache.hadoop.hdfs.server.federation.router.RouterRpcServer;
+import org.apache.hadoop.hdfs.server.federation.router.ThreadLocalContext;
 import org.apache.hadoop.hdfs.server.federation.router.async.Async;
-import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.ipc.Client;
 import org.apache.hadoop.ipc.ProtobufRpcEngine2;
-import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.ipc.internal.ShadedProtobufHelper;
 import org.apache.hadoop.util.concurrent.AsyncGet;
 import org.slf4j.Logger;
@@ -51,18 +51,16 @@ public final class AsyncRpcProtocolPBUtil {
   public static <T> void asyncResponse(Response<T> response) {
     CompletableFuture<T> callCompletableFuture =
         (CompletableFuture<T>) Client.CALL_FUTURE_THREAD_LOCAL.get();
-    // transfer originCall & callerContext to worker threads of executor.
-    final Server.Call originCall = Server.getCurCall().get();
-    final CallerContext originContext = CallerContext.getCurrent();
+    // transfer threadLocalContext to worker threads of executor.
+    ThreadLocalContext threadLocalContext = new ThreadLocalContext();
     CompletableFuture<Object> result = callCompletableFuture.thenApplyAsync(t -> {
       try {
-        Server.getCurCall().set(originCall);
-        CallerContext.setCurrent(originContext);
+        threadLocalContext.transfer();
         return response.response();
       }catch (Exception e) {
         throw new CompletionException(e);
       }
-    });
+    }, RouterRpcServer.getAsyncRouterResponse());
     Async.CUR_COMPLETABLE_FUTURE.set(result);
   }
 
