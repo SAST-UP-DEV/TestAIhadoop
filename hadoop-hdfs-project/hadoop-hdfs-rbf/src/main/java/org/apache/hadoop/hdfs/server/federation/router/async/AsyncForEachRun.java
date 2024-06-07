@@ -53,7 +53,7 @@ public class AsyncForEachRun<I, T, R> implements AsyncRun<R> {
       try {
         r = thenApply.apply(AsyncForEachRun.this, t);
       } catch (IOException e) {
-        result.completeExceptionally(e);
+        result.completeExceptionally(new CompletionException(e));
         return null;
       }
       if (satisfy) {
@@ -67,7 +67,7 @@ public class AsyncForEachRun<I, T, R> implements AsyncRun<R> {
       }
       return null;
     }).exceptionally(e ->
-        result.completeExceptionally(e.getCause()));
+        result.completeExceptionally(e));
   }
 
   public I getNow() {
