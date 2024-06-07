@@ -76,7 +76,7 @@ public class TestS3ADelegationTokenSupport {
         renewer,
         new URI("s3a://anything/"),
         new MarshalledCredentials("a", "b", ""),
-        new EncryptionSecrets(S3AEncryptionMethods.SSE_S3, ""),
+        new EncryptionSecrets(S3AEncryptionMethods.SSE_S3, "", ""),
         "origin");
     Token<AbstractS3ATokenIdentifier> t1 =
         new Token<>(identifier,

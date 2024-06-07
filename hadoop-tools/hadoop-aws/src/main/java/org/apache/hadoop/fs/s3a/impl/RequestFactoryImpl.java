@@ -282,11 +282,15 @@ public class RequestFactoryImpl implements RequestFactory {
       // Set the KMS key if present, else S3 uses AWS managed key.
       EncryptionSecretOperations.getSSEAwsKMSKey(encryptionSecrets)
           .ifPresent(copyObjectRequestBuilder::ssekmsKeyId);
+      EncryptionSecretOperations.getSSEAwsKMSEncryptionContext(encryptionSecrets)
+              .ifPresent(copyObjectRequestBuilder::ssekmsEncryptionContext);
       break;
     case DSSE_KMS:
       copyObjectRequestBuilder.serverSideEncryption(ServerSideEncryption.AWS_KMS_DSSE);
       EncryptionSecretOperations.getSSEAwsKMSKey(encryptionSecrets)
           .ifPresent(copyObjectRequestBuilder::ssekmsKeyId);
+      EncryptionSecretOperations.getSSEAwsKMSEncryptionContext(encryptionSecrets)
+              .ifPresent(copyObjectRequestBuilder::ssekmsEncryptionContext);
       break;
     case SSE_C:
       EncryptionSecretOperations.getSSECustomerKey(encryptionSecrets)
@@ -371,11 +375,15 @@ public class RequestFactoryImpl implements RequestFactory {
       // Set the KMS key if present, else S3 uses AWS managed key.
       EncryptionSecretOperations.getSSEAwsKMSKey(encryptionSecrets)
           .ifPresent(putObjectRequestBuilder::ssekmsKeyId);
+      EncryptionSecretOperations.getSSEAwsKMSEncryptionContext(encryptionSecrets)
+              .ifPresent(putObjectRequestBuilder::ssekmsEncryptionContext);
       break;
     case DSSE_KMS:
       putObjectRequestBuilder.serverSideEncryption(ServerSideEncryption.AWS_KMS_DSSE);
       EncryptionSecretOperations.getSSEAwsKMSKey(encryptionSecrets)
           .ifPresent(putObjectRequestBuilder::ssekmsKeyId);
+      EncryptionSecretOperations.getSSEAwsKMSEncryptionContext(encryptionSecrets)
+              .ifPresent(putObjectRequestBuilder::ssekmsEncryptionContext);
       break;
     case SSE_C:
       EncryptionSecretOperations.getSSECustomerKey(encryptionSecrets)
@@ -447,11 +455,15 @@ public class RequestFactoryImpl implements RequestFactory {
       // Set the KMS key if present, else S3 uses AWS managed key.
       EncryptionSecretOperations.getSSEAwsKMSKey(encryptionSecrets)
           .ifPresent(mpuRequestBuilder::ssekmsKeyId);
+      EncryptionSecretOperations.getSSEAwsKMSEncryptionContext(encryptionSecrets)
+              .ifPresent(mpuRequestBuilder::ssekmsEncryptionContext);
       break;
     case DSSE_KMS:
       mpuRequestBuilder.serverSideEncryption(ServerSideEncryption.AWS_KMS_DSSE);
       EncryptionSecretOperations.getSSEAwsKMSKey(encryptionSecrets)
           .ifPresent(mpuRequestBuilder::ssekmsKeyId);
+      EncryptionSecretOperations.getSSEAwsKMSEncryptionContext(encryptionSecrets)
+              .ifPresent(mpuRequestBuilder::ssekmsEncryptionContext);
       break;
     case SSE_C:
       EncryptionSecretOperations.getSSECustomerKey(encryptionSecrets)

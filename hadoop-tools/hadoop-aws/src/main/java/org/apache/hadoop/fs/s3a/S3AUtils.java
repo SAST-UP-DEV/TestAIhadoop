@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.fs.s3a;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import software.amazon.awssdk.core.exception.AbortedException;
 import software.amazon.awssdk.core.exception.ApiCallAttemptTimeoutException;
@@ -27,6 +28,7 @@ import software.amazon.awssdk.core.retry.RetryUtils;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.S3Object;
 
+import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
@@ -62,6 +64,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.net.SocketTimeoutException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessDeniedException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -124,6 +127,7 @@ public final class S3AUtils {
       S3AEncryptionMethods.SSE_S3.getMethod()
           + " is enabled but an encryption key was set in "
           + Constants.S3_ENCRYPTION_KEY;
+
   public static final String EOF_MESSAGE_IN_XML_PARSER
       = "Failed to sanitize XML document destined for handler class";
 
@@ -1403,6 +1407,79 @@ public final class S3AUtils {
   }
 
   /**
+   *  Get any SSE context, without propagating exceptions from
+   * JCEKs files.
+   * @param bucket bucket to query for
+   * @param conf configuration to examine
+   * @return the encryption context value or ""
+   * @throws IllegalArgumentException bad arguments.
+   */
+  public static String getS3EncryptionContext(
+      String bucket,
+      Configuration conf) {
+    try {
+      return getEncryptionContextValue(bucket, conf);
+    } catch (IOException e) {
+      // never going to happen, but to make sure, covert to
+      // runtime exception
+      throw new UncheckedIOException(e);
+    }
+  }
+
+  /**
+   * Get any SSE context from a configuration/credential provider.
+   * This includes converting the values to a base64-encoded UTF-8 string
+   * holding JSON with the encryption context key-value pairs
+   * @param bucket bucket to query for
+   * @param conf configuration to examine
+   * @param propagateExceptions should IO exceptions be rethrown?
+   * @return the Base64 encryption context or ""
+   * @throws IllegalArgumentException bad arguments.
+   * @throws IOException if propagateExceptions==true and reading a JCEKS file raised an IOE
+   */
+  public static String getS3EncryptionContextBase64Encoded(
+      String bucket,
+      Configuration conf,
+      boolean propagateExceptions) throws IOException {
+    try {
+      final String encryptionContextValue = getEncryptionContextValue(bucket, conf);
+      if (StringUtils.isBlank(encryptionContextValue)) {
+        return "";
+      }
+      final Map<String, String> encryptionContextMap = getTrimmedStringCollectionSplitByEquals(
+          encryptionContextValue);
+      if (encryptionContextMap.isEmpty()) {
+        return "";
+      }
+      final String encryptionContextJson = new ObjectMapper().writeValueAsString(
+          encryptionContextMap);
+      return Base64.encodeBase64String(encryptionContextJson.getBytes(StandardCharsets.UTF_8));
+    } catch (IOException e) {
+      if (propagateExceptions) {
+        throw e;
+      }
+      LOG.warn("Cannot retrieve {} for bucket {}",
+              S3_ENCRYPTION_CONTEXT, bucket, e);
+      return "";
+    }
+  }
+
+  private static String getEncryptionContextValue(String bucket, Configuration conf)
+      throws IOException {
+    // look up the per-bucket value of the encryption context
+    String encryptionContext = lookupBucketSecret(bucket, conf, S3_ENCRYPTION_CONTEXT);
+    if (encryptionContext == null) {
+      // look up the global value of the encryption context
+      encryptionContext = lookupPassword(null, conf, S3_ENCRYPTION_CONTEXT);
+    }
+    if (encryptionContext == null) {
+      // no encryption context, return ""
+      return "";
+    }
+    return encryptionContext;
+  }
+
+  /**
    * Get the server-side encryption or client side encryption algorithm.
    * This includes validation of the configuration, checking the state of
    * the encryption key given the chosen algorithm.
@@ -1493,7 +1570,10 @@ public final class S3AUtils {
       LOG.debug("Data is unencrypted");
       break;
     }
-    return new EncryptionSecrets(encryptionMethod, encryptionKey);
+
+    String encryptionContext = getS3EncryptionContextBase64Encoded(bucket, conf,
+        encryptionMethod.requiresSecret());
+    return new EncryptionSecrets(encryptionMethod, encryptionKey, encryptionContext);
   }
 
   /**
@@ -1686,6 +1766,21 @@ public final class S3AUtils {
       final Configuration configuration,
       final String name) {
     String valueString = configuration.get(name);
+    return getTrimmedStringCollectionSplitByEquals(valueString);
+  }
+
+  /**
+   * Get the equal op (=) delimited key-value pairs of the <code>name</code> property as
+   * a collection of pair of <code>String</code>s, trimmed of the leading and trailing whitespace
+   * after delimiting the <code>name</code> by comma and new line separator.
+   * If no such property is specified then empty <code>Map</code> is returned.
+   *
+   * @param valueString the string containing the key-value pairs.
+   * @return property value as a <code>Map</code> of <code>String</code>s, or empty
+   * <code>Map</code>.
+   */
+  private static Map<String, String> getTrimmedStringCollectionSplitByEquals(
+      final String valueString) {
     if (null == valueString) {
       return new HashMap<>();
     }
