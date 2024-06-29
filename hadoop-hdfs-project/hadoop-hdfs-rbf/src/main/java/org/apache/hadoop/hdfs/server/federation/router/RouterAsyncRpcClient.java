@@ -117,7 +117,11 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
       List<? extends FederationNamenodeContext> namenodes,
       boolean useObserver, Class<?> protocol,
       Method method, Object... params) throws IOException {
-
+    if (namenodes == null || namenodes.isEmpty()) {
+      throw new IOException("No namenodes to invoke " + method.getName() +
+          " with params " + Arrays.deepToString(params) + " from "
+          + router.getRouterId());
+    }
     // transfer threadLocalContext to worker threads of executor.
     ThreadLocalContext threadLocalContext = new ThreadLocalContext();
     asyncComplete(null);
@@ -133,32 +137,21 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
     return getFutureResult();
   }
 
-  @SuppressWarnings("checkstyle:MethodLength")
   private void invokeMethodAsync(
       final UserGroupInformation ugi,
       final List<FederationNamenodeContext> namenodes,
       boolean useObserver,
-      final Class<?> protocol, final Method method, final Object... params)
-      throws IOException {
-
-    if (namenodes == null || namenodes.isEmpty()) {
-      throw new IOException("No namenodes to invoke " + method.getName() +
-          " with params " + Arrays.deepToString(params) + " from "
-          + router.getRouterId());
-    }
+      final Class<?> protocol, final Method method, final Object... params) {
 
     addClientInfoToCallerContext(ugi);
     if (rpcMonitor != null) {
       rpcMonitor.proxyOp();
     }
-
-    final boolean[] failover = {false};
-    final boolean[] shouldUseObserver = {useObserver};
-    final boolean[] complete = {false};
+    final ExecutionStatus status = new ExecutionStatus(false, useObserver);
     Map<FederationNamenodeContext, IOException> ioes = new LinkedHashMap<>();
     asyncForEach(namenodes.iterator(),
-        namenode -> {
-          if (!shouldUseObserver[0]
+        (foreach, namenode) -> {
+          if (!status.isShouldUseObserver()
               && (namenode.getState() == FederationNamenodeServiceState.OBSERVER)) {
             asyncComplete(null);
             return;
@@ -168,11 +161,11 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
           try {
             ConnectionContext connection = getConnection(ugi, nsId, rpcAddress, protocol);
             NameNodeProxiesClient.ProxyAndInfo<?> client = connection.getClient();
-            invokeAsync(nsId, namenode, useObserver, 0, method,
+            invokeAsync(nsId, namenode, status.isShouldUseObserver(), 0, method,
                 client.getProxy(), params);
-            asyncApply(ret -> {
-              complete[0] = true;
-              if (failover[0] &&
+            asyncApply(res -> {
+              status.setComplete(true);
+              if (status.isFailOver() &&
                   FederationNamenodeServiceState.OBSERVER != namenode.getState()) {
                 // Success on alternate server, update
                 InetSocketAddress address = client.getAddress();
@@ -184,20 +177,21 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
               if (router.getRouterClientMetrics() != null) {
                 router.getRouterClientMetrics().incInvokedMethod(method);
               }
-              return ret;
+              foreach.breakNow();
+              return res;
             });
-            asyncCatch((o, ioe) -> {
+            asyncCatch((res, ioe) -> {
               ioes.put(namenode, ioe);
               if (ioe instanceof ObserverRetryOnActiveException) {
                 LOG.info("Encountered ObserverRetryOnActiveException from {}."
                     + " Retry active namenode directly.", namenode);
-                shouldUseObserver[0] = false;
+                status.setShouldUseObserver(false);
               } else if (ioe instanceof StandbyException) {
                 // Fail over indicated by retry policy and/or NN
                 if (rpcMonitor != null) {
                   rpcMonitor.proxyOpFailureStandby(nsId);
                 }
-                failover[0] = true;
+                status.setShouldUseObserver(true);
               } else if (isUnavailableException(ioe)) {
                 if (rpcMonitor != null) {
                   rpcMonitor.proxyOpFailureCommunicate(nsId);
@@ -206,7 +200,7 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
                   namenodeResolver.updateUnavailableNamenode(nsId,
                       NetUtils.createSocketAddr(namenode.getRpcAddress()));
                 } else {
-                  failover[0] = true;
+                  status.setShouldUseObserver(true);
                 }
               } else if (ioe instanceof RemoteException) {
                 if (this.rpcMonitor != null) {
@@ -240,11 +234,11 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
                 }
                 throw ioe;
               }
-              return o;
+              return res;
             }, IOException.class);
-            asyncFinally(o -> {
+            asyncFinally(res -> {
               connection.release();
-              return o;
+              return res;
             });
           } catch (ConnectionNullException ioe) {
             if (rpcMonitor != null) {
@@ -257,18 +251,11 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
             se.initCause(ioe);
             throw se;
           }
-        },
-        (asyncForEachRun, ret) -> {
-          if (complete[0]) {
-            asyncForEachRun.breakNow();
-            return ret;
-          }
-          return ret;
         });
 
-    asyncApply(o -> {
-      if (complete[0]) {
-        return o;
+    asyncApply(res -> {
+      if (status.isComplete()) {
+        return res;
       }
       if (this.rpcMonitor != null) {
         this.rpcMonitor.proxyOpComplete(false, null, null);
@@ -373,12 +360,12 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
     final Method m = remoteMethod.getMethod();
     List<IOException> thrownExceptions = new ArrayList<>();
     final Object[] firstResult = {null};
-    final Boolean[] complete = {false};
+    final ExecutionStatus status = new ExecutionStatus();
     Iterator<RemoteLocationContext> locationIterator =
         (Iterator<RemoteLocationContext>) locations.iterator();
     // Invoke in priority order
     asyncForEach(locationIterator,
-        loc -> {
+        (foreach, loc) -> {
           String ns = loc.getNameserviceId();
           boolean isObserverRead = isObserverReadEligible(ns, m);
           List<? extends FederationNamenodeContext> namenodes =
@@ -388,21 +375,22 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
             Class<?> proto = remoteMethod.getProtocol();
             Object[] params = remoteMethod.getParams(loc);
             invokeMethod(ugi, namenodes, isObserverRead, proto, m, params);
-          });
-          asyncApply(result -> {
-            // Check if the result is what we expected
-            if (isExpectedClass(expectedResultClass, result) &&
-                isExpectedValue(expectedResultValue, result)) {
-              // Valid result, stop here
-              @SuppressWarnings("unchecked") R location = (R) loc;
-              @SuppressWarnings("unchecked") T ret = (T) result;
-              complete[0] = true;
-              return new RemoteResult<>(location, ret);
-            }
-            if (firstResult[0] == null) {
-              firstResult[0] = result;
-            }
-            return null;
+            asyncApply(result -> {
+              // Check if the result is what we expected
+              if (isExpectedClass(expectedResultClass, result) &&
+                  isExpectedValue(expectedResultValue, result)) {
+                // Valid result, stop here
+                @SuppressWarnings("unchecked") R location = (R) loc;
+                @SuppressWarnings("unchecked") T ret = (T) result;
+                foreach.breakNow();
+                status.setComplete(true);
+                return new RemoteResult<>(location, ret);
+              }
+              if (firstResult[0] == null) {
+                firstResult[0] = result;
+              }
+              return null;
+            });
           });
           asyncCatch((ret, e) -> {
             if (e instanceof IOException) {
@@ -427,15 +415,9 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
             releasePermit(ns, ugi, remoteMethod, controller);
             return ret;
           });
-        },
-        (asyncForEachRun, ret) -> {
-          if (complete[0]) {
-            asyncForEachRun.breakNow();
-          }
-          return ret;
         });
     asyncApply(result -> {
-      if (complete[0]) {
+      if (status.isComplete()) {
         return result;
       }
       if (!thrownExceptions.isEmpty()) {
@@ -499,7 +481,6 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
   }
 
   @Override
-  @SuppressWarnings({"unchecked"})
   public <T extends RemoteLocationContext, R> List<RemoteResult<T, R>>
       invokeConcurrent(final Collection<T> locations,
                    final RemoteMethod method, boolean standby, long timeOutMs,
@@ -522,10 +503,10 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
         Class<?> proto = method.getProtocol();
         Object[] paramList = method.getParams(location);
         invokeMethod(ugi, namenodes, isObserverRead, proto, m, paramList);
-      });
-      asyncApply((ApplyFunction<R, Object>) result -> {
-        RemoteResult<T, R> remoteResult = new RemoteResult<>(location, result);
-        return Collections.singletonList(remoteResult);
+        asyncApply((ApplyFunction<R, Object>) result -> {
+          RemoteResult<T, R> remoteResult = new RemoteResult<>(location, result);
+          return Collections.singletonList(remoteResult);
+        });
       });
       asyncCatch((o, ioe) -> {
         throw processException(ioe, location);
@@ -633,6 +614,49 @@ public class RouterAsyncRpcClient extends RouterRpcClient{
       return o;
     });
     return getFutureResult();
+  }
+
+  static class ExecutionStatus {
+    private byte flags;
+    private static final byte FAIL_OVER_BIT = 1;
+    private static final byte SHOULD_USE_OBSERVER_BIT = 2;
+    private static final byte COMPLETE_BIT = 4;
+
+    ExecutionStatus() {
+      this(false, false);
+    }
+
+    ExecutionStatus(boolean failOver, boolean shouldUseObserver) {
+      this.flags = 0;
+      setFailOver(failOver);
+      setShouldUseObserver(shouldUseObserver);
+      setComplete(false);
+    }
+
+    private void setFailOver(boolean failOver) {
+      flags = (byte) (failOver ? (flags | FAIL_OVER_BIT) : (flags & ~FAIL_OVER_BIT));
+    }
+
+    private void setShouldUseObserver(boolean shouldUseObserver) {
+      flags = (byte) (shouldUseObserver ?
+          (flags | SHOULD_USE_OBSERVER_BIT) : (flags & ~SHOULD_USE_OBSERVER_BIT));
+    }
+
+    private void setComplete(boolean complete) {
+      flags = (byte) (complete ? (flags | COMPLETE_BIT) : (flags & ~COMPLETE_BIT));
+    }
+
+    public boolean isFailOver() {
+      return (flags & FAIL_OVER_BIT) != 0;
+    }
+
+    public boolean isShouldUseObserver() {
+      return (flags &  SHOULD_USE_OBSERVER_BIT) != 0;
+    }
+
+    public boolean isComplete() {
+      return (flags & COMPLETE_BIT) != 0;
+    }
   }
 
   // TODO: only test!!!
