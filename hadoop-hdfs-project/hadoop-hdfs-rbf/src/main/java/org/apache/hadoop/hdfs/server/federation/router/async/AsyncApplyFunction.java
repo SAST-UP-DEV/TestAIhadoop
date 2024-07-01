@@ -19,8 +19,9 @@ package org.apache.hadoop.hdfs.server.federation.router.async;
 
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
+
+import static org.apache.hadoop.hdfs.server.federation.router.async.Async.warpCompletionException;
 
 /**
  * The AsyncApplyFunction interface represents a function that
@@ -35,6 +36,15 @@ import java.util.concurrent.Executor;
  * non-blocking execution of tasks and is particularly useful for
  * I/O operations or any operation that may take a significant amount
  * of time to complete.</p>
+ *
+ * <p>AsyncApplyFunction is used to implement the following semantics:</p>
+ * <pre>
+ * {@code
+ *    T res = doAsync1(input);
+ *    // Can use AsyncApplyFunction
+ *    R result = doAsync2(res);
+ * }
+ * </pre>
  *
  * @param <T> the type of the input to the function
  * @param <R> the type of the result of the function
@@ -77,7 +87,22 @@ public interface AsyncApplyFunction<T, R> extends ApplyFunction<T, R> {
     return result();
   }
 
-
+  /**
+   * Initiates the asynchronous application of this function to the given result.
+   * <p>
+   * This method calls applyAsync to start the asynchronous operation and then retrieves
+   * the current thread's CompletableFuture using getCurCompletableFuture.
+   * It returns this CompletableFuture, which will be completed with the result of the
+   * asynchronous operation once it is finished.
+   * <p>
+   * This method is useful for chaining with other asynchronous operations, as it allows the
+   * current operation to be part of a larger asynchronous workflow.
+   *
+   * @param t the function argument
+   * @return a CompletableFuture that will be completed with the result of the
+   *         asynchronous operation
+   * @throws IOException if an I/O error occurs during the initiation of the asynchronous operation
+   */
   default CompletableFuture<R> async(T t) throws IOException {
     applyAsync(t);
     CompletableFuture<R> completableFuture = getCurCompletableFuture();
@@ -104,11 +129,10 @@ public interface AsyncApplyFunction<T, R> extends ApplyFunction<T, R> {
       try {
         return async(t);
       } catch (IOException e) {
-        throw new CompletionException(e);
+        throw warpCompletionException(e);
       }
     });
   }
-
 
   /**
    * Asynchronously applies this function to the result of the given
@@ -131,7 +155,7 @@ public interface AsyncApplyFunction<T, R> extends ApplyFunction<T, R> {
       try {
         return async(t);
       } catch (IOException e) {
-        throw new CompletionException(e);
+        throw warpCompletionException(e);
       }
     }, executor);
   }

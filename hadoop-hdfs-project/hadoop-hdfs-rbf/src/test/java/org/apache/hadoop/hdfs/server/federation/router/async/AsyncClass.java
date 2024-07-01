@@ -73,7 +73,7 @@ import static org.apache.hadoop.hdfs.server.federation.router.async.AsyncUtil.as
  */
 public class AsyncClass extends SyncClass{
   private static final Logger LOG =
-      LoggerFactory.getLogger(TestAsyncUtil.class);
+      LoggerFactory.getLogger(AsyncClass.class);
   private ExecutorService executorService;
   private final static String ASYNC_WORKER = "Async Worker";
 
@@ -113,13 +113,27 @@ public class AsyncClass extends SyncClass{
   }
 
   @Override
+  public String exceptionMethod(int input) {
+    if (input == 2) {
+      asyncThrowException(new IOException("input 2 exception"));
+      return null;
+    } else if (input == 3) {
+      asyncThrowException(new RuntimeException("input 3 exception"));
+      return null;
+    }
+    return applyMethod(input);
+  }
+
+  @Override
   public String forEachMethod(List<Integer> list) {
     StringBuilder result = new StringBuilder();
     asyncForEach(list.iterator(),
-        input -> timeConsumingMethod(input),
-        (forEachRun, res) -> {
-          result.append("forEach" + res + ",");
-          return result.toString();
+        (forEach, input) -> {
+          timeConsumingMethod(input);
+          asyncApply(res -> {
+            result.append("forEach" + res + ",");
+            return result.toString();
+          });
         });
     return asyncReturn(String.class);
   }
@@ -128,14 +142,16 @@ public class AsyncClass extends SyncClass{
   public String forEachBreakMethod(List<Integer> list) {
     StringBuilder result = new StringBuilder();
     asyncForEach(list.iterator(),
-        input -> timeConsumingMethod(input),
-        (forEachRun, res) -> {
-          if (res.equals("[2]")) {
-            forEachRun.breakNow();
-          } else {
-            result.append("forEach" + res + ",");
-          }
-          return result.toString();
+        (forEach, input) -> {
+          timeConsumingMethod(input);
+          asyncApply(res -> {
+            if (res.equals("[2]")) {
+              forEach.breakNow();
+            } else {
+              result.append("forEach" + res + ",");
+            }
+            return result.toString();
+          });
         });
     return asyncReturn(String.class);
   }
@@ -143,30 +159,23 @@ public class AsyncClass extends SyncClass{
   @Override
   public String forEachBreakByExceptionMethod(List<Integer> list) {
     StringBuilder result = new StringBuilder();
-    boolean[] breakNow = {false};
     asyncForEach(list.iterator(),
-        input -> {
+        (forEach, input) -> {
           asyncTry(() -> {
             applyMethod(input, true);
             asyncApply(res -> {
               result.append("forEach" + res + ",");
-              return res;
+              return result.toString();
             });
           });
           asyncCatch((res, e) -> {
             if (e instanceof IOException) {
               result.append(e + ",");
             } else if (e instanceof RuntimeException) {
-              breakNow[0] = true;
+              forEach.breakNow();
             }
-            return res;
+            return result.toString();
           }, Exception.class);
-        },
-        (forEachRun, res) -> {
-          if (breakNow[0]) {
-            forEachRun.breakNow();
-          }
-          return result.toString();
         });
     return asyncReturn(String.class);
   }
@@ -237,5 +246,4 @@ public class AsyncClass extends SyncClass{
     Async.CUR_COMPLETABLE_FUTURE.set(result);
     return null;
   }
-
 }

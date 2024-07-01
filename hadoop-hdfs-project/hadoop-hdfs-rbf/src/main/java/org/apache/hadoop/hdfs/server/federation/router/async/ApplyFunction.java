@@ -19,13 +19,23 @@ package org.apache.hadoop.hdfs.server.federation.router.async;
 
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
+
+import static org.apache.hadoop.hdfs.server.federation.router.async.Async.warpCompletionException;
 
 /**
  * Represents a function that accepts a value of type T and produces a result of type R.
  * This interface extends {@link Async} and provides methods to apply the function
  * asynchronously using {@link CompletableFuture}.
+ *
+ * <p>ApplyFunction is used to implement the following semantics:</p>
+ * <pre>
+ * {@code
+ *    T res = doAsync(input);
+ *    // Can use ApplyFunction
+ *    R result = thenApply(res);
+ * }
+ * </pre>
  *
  * @param <T> the type of the input to the function
  * @param <R> the type of the result of the function
@@ -54,7 +64,7 @@ public interface ApplyFunction<T, R> extends Async<R>{
       try {
         return ApplyFunction.this.apply(t);
       } catch (IOException e) {
-        throw new CompletionException(e);
+        throw warpCompletionException(e);
       }
     });
   }
@@ -72,9 +82,8 @@ public interface ApplyFunction<T, R> extends Async<R>{
       try {
         return ApplyFunction.this.apply(t);
       } catch (IOException e) {
-        throw new CompletionException(e);
+        throw warpCompletionException(e);
       }
     }, executor);
   }
-
 }
