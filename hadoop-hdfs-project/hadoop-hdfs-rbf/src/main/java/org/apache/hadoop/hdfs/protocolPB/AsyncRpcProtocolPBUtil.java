@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hdfs.protocolPB;
 
+import org.apache.hadoop.hdfs.server.federation.router.async.ApplyFunction;
 import org.apache.hadoop.hdfs.server.federation.router.async.Async;
 import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.ipc.Client;
@@ -33,12 +34,41 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
 
+import static org.apache.hadoop.hdfs.server.federation.router.async.Async.warpCompletionException;
+import static org.apache.hadoop.hdfs.server.federation.router.async.AsyncUtil.asyncApply;
+import static org.apache.hadoop.hdfs.server.federation.router.async.AsyncUtil.asyncComplete;
+import static org.apache.hadoop.hdfs.server.federation.router.async.AsyncUtil.asyncReturn;
 import static org.apache.hadoop.ipc.internal.ShadedProtobufHelper.ipc;
 
 public final class AsyncRpcProtocolPBUtil {
   public static final Logger LOG = LoggerFactory.getLogger(AsyncRpcProtocolPBUtil.class);
 
   private AsyncRpcProtocolPBUtil() {}
+
+  public static <T, R> R asyncIpcClient(
+      ShadedProtobufHelper.IpcCall<T> call, ApplyFunction<T, R> response,
+      Class<R> clazz) throws IOException {
+    CompletableFuture<Object> completableFuture = new CompletableFuture<>();
+    Client.CALL_FUTURE_THREAD_LOCAL.set(completableFuture);
+    ipc(call);
+    AsyncGet<T, Exception> asyncReqMessage =
+        (AsyncGet<T, Exception>) ProtobufRpcEngine2.getAsyncReturnMessage();
+    // transfer originCall & callerContext to worker threads of executor.
+    final Server.Call originCall = Server.getCurCall().get();
+    final CallerContext originContext = CallerContext.getCurrent();
+    asyncComplete(completableFuture);
+    asyncApply(o -> {
+      try {
+        Server.getCurCall().set(originCall);
+        CallerContext.setCurrent(originContext);
+        T res = asyncReqMessage.get(-1, null);
+        return response.apply(res);
+      } catch (Exception e) {
+        throw warpCompletionException(e);
+      }
+    });
+    return asyncReturn(clazz);
+  }
 
   public static  <T> AsyncGet<T, Exception> asyncIpc(
       ShadedProtobufHelper.IpcCall<T> call) throws IOException {
