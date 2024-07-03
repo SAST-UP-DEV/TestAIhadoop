@@ -74,7 +74,8 @@ public class TestRouterClientSideTranslatorPB {
   private static RouterClientProtocolTranslatorPB clientProtocolTranslatorPB;
   private static RouterGetUserMappingsProtocolTranslatorPB getUserMappingsProtocolTranslatorPB;
   private static RouterNamenodeProtocolTranslatorPB namenodeProtocolTranslatorPB;
-  private static RouterRefreshUserMappingsProtocolTranslatorPB refreshUserMappingsProtocolTranslatorPB;
+  private static RouterRefreshUserMappingsProtocolTranslatorPB
+      refreshUserMappingsProtocolTranslatorPB;
   private static final String TEST_DIR_PATH = "/test";
   private boolean mode;
 
@@ -131,7 +132,8 @@ public class TestRouterClientSideTranslatorPB {
     Boolean success = syncReturn(Boolean.class);
     assertTrue(success);
 
-    clientProtocolTranslatorPB.setPermission(TEST_DIR_PATH, new FsPermission(READ_WRITE, READ, NONE));
+    clientProtocolTranslatorPB.setPermission(TEST_DIR_PATH,
+        new FsPermission(READ_WRITE, READ, NONE));
     syncReturn(Void.class);
 
     clientProtocolTranslatorPB.getFileInfo(TEST_DIR_PATH);
@@ -174,7 +176,8 @@ public class TestRouterClientSideTranslatorPB {
     hdfsFileStatus = syncReturn(HdfsFileStatus.class);
     assertEquals("testCreate.file", hdfsFileStatus.getSymlink().getName());
 
-    clientProtocolTranslatorPB.rename(TEST_DIR_PATH + "/testCreate.file", TEST_DIR_PATH + "/testRename.file");
+    clientProtocolTranslatorPB.rename(TEST_DIR_PATH + "/testCreate.file",
+        TEST_DIR_PATH + "/testRename.file");
     success = syncReturn(boolean.class);
     assertTrue(success);
 
