@@ -106,7 +106,6 @@ import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.AddCac
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.AllowSnapshotRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.AllowSnapshotResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.AppendRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.AppendResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CachePoolEntryProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CheckAccessRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CheckAccessResponseProto;
@@ -115,7 +114,6 @@ import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.Comple
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.ConcatRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.ConcatResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CreateRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CreateResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CreateSnapshotRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CreateSnapshotResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.CreateSymlinkRequestProto;
@@ -134,7 +132,6 @@ import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetAdd
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetBatchedListingRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetBatchedListingResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetBlockLocationsRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetBlockLocationsResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetContentSummaryRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetContentSummaryResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetCurrentEditLogTxidRequestProto;
@@ -165,7 +162,6 @@ import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetPre
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetQuotaUsageRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetQuotaUsageResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetServerDefaultsRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetServerDefaultsResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetSlowDatanodeReportRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetSlowDatanodeReportResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetSnapshotDiffReportRequestProto;
@@ -229,13 +225,10 @@ import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SaveNa
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetBalancerBandwidthRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetBalancerBandwidthResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetOwnerRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetOwnerResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetPermissionRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetPermissionResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetQuotaRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetQuotaResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetReplicationRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetReplicationResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetSafeModeRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetSafeModeResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetStoragePolicyRequestProto;
@@ -243,7 +236,6 @@ import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetSto
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetTimesRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SetTimesResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.TruncateRequestProto;
-import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.TruncateResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.UnsetStoragePolicyRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.UnsetStoragePolicyResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.UpdateBlockForPipelineRequestProto;
@@ -309,6 +301,7 @@ import org.apache.hadoop.util.concurrent.AsyncGet;
 import org.apache.hadoop.hdfs.protocolPB.AsyncRpcProtocolPBUtil.Response;
 
 import static org.apache.hadoop.hdfs.protocolPB.AsyncRpcProtocolPBUtil.asyncIpc;
+import static org.apache.hadoop.hdfs.protocolPB.AsyncRpcProtocolPBUtil.asyncIpcClient;
 import static org.apache.hadoop.hdfs.protocolPB.AsyncRpcProtocolPBUtil.asyncResponse;
 import static org.apache.hadoop.ipc.internal.ShadedProtobufHelper.getRemoteException;
 import static org.apache.hadoop.ipc.internal.ShadedProtobufHelper.ipc;
@@ -345,14 +338,10 @@ public class RouterClientProtocolTranslatorPB extends ClientNamenodeProtocolTran
         .setLength(length)
         .build();
 
-    AsyncGet<GetBlockLocationsResponseProto, Exception> asyncGet
-        = asyncIpc(() -> rpcProxy.getBlockLocations(null, req));
-    asyncResponse(() -> {
-      GetBlockLocationsResponseProto resp = asyncGet.get(-1, null);
-      return resp.hasLocations() ?
-          PBHelperClient.convert(resp.getLocations()) : null;
-    });
-    return null;
+    return asyncIpcClient(
+        () -> rpcProxy.getBlockLocations(null, req),
+        res -> res.hasLocations() ? PBHelperClient.convert(res.getLocations()) : null,
+        LocatedBlocks.class);
   }
 
   @Override
@@ -362,11 +351,10 @@ public class RouterClientProtocolTranslatorPB extends ClientNamenodeProtocolTran
     }
     GetServerDefaultsRequestProto req = VOID_GET_SERVER_DEFAULT_REQUEST;
 
-    AsyncGet<GetServerDefaultsResponseProto, Exception> asyncGet
-        = asyncIpc(() -> rpcProxy.getServerDefaults(null, req));
-    asyncResponse(() ->
-        PBHelperClient.convert(asyncGet.get(-1, null).getServerDefaults()));
-    return null;
+    return asyncIpcClient(
+        () -> rpcProxy.getServerDefaults(null, req),
+        res -> PBHelperClient.convert(res.getServerDefaults()),
+        FsServerDefaults.class);
   }
 
   @Override
@@ -404,13 +392,9 @@ public class RouterClientProtocolTranslatorPB extends ClientNamenodeProtocolTran
         PBHelperClient.convert(supportedVersions));
     CreateRequestProto req = builder.build();
 
-    AsyncGet<CreateResponseProto, Exception> asyncGet
-        = asyncIpc(() -> rpcProxy.create(null, req));
-    asyncResponse(() -> {
-      CreateResponseProto res = asyncGet.get(-1, null);
-      return res.hasFs() ? PBHelperClient.convert(res.getFs()) : null;
-    });
-    return null;
+    return asyncIpcClient(() -> rpcProxy.create(null, req),
+        res -> res.hasFs() ? PBHelperClient.convert(res.getFs()) : null,
+        HdfsFileStatus.class);
   }
 
   @Override
@@ -426,10 +410,8 @@ public class RouterClientProtocolTranslatorPB extends ClientNamenodeProtocolTran
         .setClientName(clientName)
         .build();
 
-    AsyncGet<TruncateResponseProto, Exception> asyncGet
-        = asyncIpc(() -> rpcProxy.truncate(null, req));
-    asyncResponse(() -> asyncGet.get(-1, null).getResult());
-    return true;
+    return asyncIpcClient(() -> rpcProxy.truncate(null, req),
+        res -> res.getResult(), boolean.class);
   }
 
   @Override
@@ -444,17 +426,14 @@ public class RouterClientProtocolTranslatorPB extends ClientNamenodeProtocolTran
             PBHelperClient.convertCreateFlag(flag))
         .build();
 
-    AsyncGet<AppendResponseProto, Exception> asyncGet =
-        asyncIpc(() -> rpcProxy.append(null, req));
-    asyncResponse(() -> {
-      AppendResponseProto res = asyncGet.get(-1, null);
-      LocatedBlock lastBlock = res.hasBlock() ? PBHelperClient
-          .convertLocatedBlockProto(res.getBlock()) : null;
-      HdfsFileStatus stat = (res.hasStat()) ?
-          PBHelperClient.convert(res.getStat()) : null;
-      return new LastBlockWithStatus(lastBlock, stat);
-    });
-    return null;
+    return asyncIpcClient(() -> rpcProxy.append(null, req),
+        res -> {
+          LocatedBlock lastBlock = res.hasBlock() ? PBHelperClient
+              .convertLocatedBlockProto(res.getBlock()) : null;
+          HdfsFileStatus stat = (res.hasStat()) ?
+              PBHelperClient.convert(res.getStat()) : null;
+          return new LastBlockWithStatus(lastBlock, stat);
+        }, LastBlockWithStatus.class);
   }
 
   @Override
@@ -469,10 +448,8 @@ public class RouterClientProtocolTranslatorPB extends ClientNamenodeProtocolTran
         .setReplication(replication)
         .build();
 
-    AsyncGet<SetReplicationResponseProto, Exception> asyncGet
-        = asyncIpc(() -> rpcProxy.setReplication(null, req));
-    asyncResponse(() -> asyncGet.get(-1, null).getResult());
-    return true;
+    return asyncIpcClient(() -> rpcProxy.setReplication(null, req),
+        res -> res.getResult(), boolean.class);
   }
 
   @Override
@@ -488,12 +465,8 @@ public class RouterClientProtocolTranslatorPB extends ClientNamenodeProtocolTran
         .setPermission(PBHelperClient.convert(permission))
         .build();
 
-    AsyncGet<SetPermissionResponseProto, Exception> asyncGet
-        = asyncIpc(() -> rpcProxy.setPermission(null, req));
-    asyncResponse(() -> {
-      asyncGet.get(-1, null);
-      return null;
-    });
+    asyncIpcClient(() -> rpcProxy.setPermission(null, req),
+        res -> null, null);
   }
 
   @Override
@@ -501,6 +474,7 @@ public class RouterClientProtocolTranslatorPB extends ClientNamenodeProtocolTran
       throws IOException {
     if (!Client.isAsynchronousMode()) {
       super.setOwner(src, username, groupname);
+      return;
     }
 
     SetOwnerRequestProto.Builder req = SetOwnerRequestProto.newBuilder()
@@ -512,9 +486,8 @@ public class RouterClientProtocolTranslatorPB extends ClientNamenodeProtocolTran
       req.setGroupname(groupname);
     }
 
-    AsyncGet<SetOwnerResponseProto, Exception> asyncGet
-        = asyncIpc(() -> rpcProxy.setOwner(null, req.build()));
-    asyncResponse(() -> asyncGet.get(-1, null));
+    asyncIpcClient(() -> rpcProxy.setOwner(null, req.build()),
+        res -> null, null);
   }
 
   @Override
@@ -522,13 +495,13 @@ public class RouterClientProtocolTranslatorPB extends ClientNamenodeProtocolTran
                            String holder) throws IOException {
     if (!Client.isAsynchronousMode()) {
       super.abandonBlock(b, fileId, src, holder);
+      return;
     }
     AbandonBlockRequestProto req = AbandonBlockRequestProto.newBuilder()
         .setB(PBHelperClient.convert(b)).setSrc(src).setHolder(holder)
         .setFileId(fileId).build();
-    AsyncGet<AbandonBlockResponseProto, Exception> asyncGet
-        = asyncIpc(() -> rpcProxy.abandonBlock(null, req));
-    asyncResponse(() -> asyncGet.get(-1, null));
+    asyncIpcClient(() -> rpcProxy.abandonBlock(null, req),
+        res -> null, null);
   }
 
   @Override
