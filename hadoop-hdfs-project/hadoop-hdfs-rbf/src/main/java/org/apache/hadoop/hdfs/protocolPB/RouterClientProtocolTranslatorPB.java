@@ -1095,8 +1095,7 @@ public class RouterClientProtocolTranslatorPB extends ClientNamenodeProtocolTran
       });
       return null;
     }
-    GetFileInfoResponseProto res = ipc(() -> rpcProxy.getFileInfo(null, req));
-    return res.hasFs() ? PBHelperClient.convert(res.getFs()) : null;
+    return super.getFileInfo(src);
   }
 
   @Override
