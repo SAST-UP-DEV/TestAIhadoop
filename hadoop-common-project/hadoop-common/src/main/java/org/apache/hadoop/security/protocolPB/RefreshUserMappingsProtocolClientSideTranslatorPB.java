@@ -38,7 +38,7 @@ public class RefreshUserMappingsProtocolClientSideTranslatorPB implements
   private final static RpcController NULL_CONTROLLER = null;
   private final RefreshUserMappingsProtocolPB rpcProxy;
   
-  private final static RefreshUserToGroupsMappingsRequestProto
+  private final static RefreshUserToGroupsMappingsRequestProto 
   VOID_REFRESH_USER_TO_GROUPS_MAPPING_REQUEST = 
       RefreshUserToGroupsMappingsRequestProto.newBuilder().build();
 
