@@ -1137,7 +1137,7 @@ public class ClientNamenodeProtocolTranslatorPB implements
             setId(id).build()));
   }
 
-  private static class BatchedCacheEntries
+  protected static class BatchedCacheEntries
       implements BatchedEntries<CacheDirectiveEntry> {
     private final ListCacheDirectivesResponseProto response;
 
@@ -1200,7 +1200,7 @@ public class ClientNamenodeProtocolTranslatorPB implements
             setPoolName(cachePoolName).build()));
   }
 
-  private static class BatchedCachePoolEntries
+  protected static class BatchedCachePoolEntries
       implements BatchedEntries<CachePoolEntry> {
     private final ListCachePoolsResponseProto proto;
 

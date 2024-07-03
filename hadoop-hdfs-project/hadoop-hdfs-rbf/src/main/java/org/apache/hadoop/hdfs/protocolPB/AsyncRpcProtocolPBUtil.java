@@ -19,7 +19,6 @@
 package org.apache.hadoop.hdfs.protocolPB;
 
 import org.apache.hadoop.hdfs.server.federation.router.async.ApplyFunction;
-import org.apache.hadoop.hdfs.server.federation.router.async.Async;
 import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.ipc.Client;
 import org.apache.hadoop.ipc.ProtobufRpcEngine2;
@@ -31,8 +30,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-
 
 import static org.apache.hadoop.hdfs.server.federation.router.async.Async.warpCompletionException;
 import static org.apache.hadoop.hdfs.server.federation.router.async.AsyncUtil.asyncApply;
@@ -68,36 +65,5 @@ public final class AsyncRpcProtocolPBUtil {
       }
     });
     return asyncReturn(clazz);
-  }
-
-  public static  <T> AsyncGet<T, Exception> asyncIpc(
-      ShadedProtobufHelper.IpcCall<T> call) throws IOException {
-    CompletableFuture<Object> completableFuture = new CompletableFuture<>();
-    Client.CALL_FUTURE_THREAD_LOCAL.set(completableFuture);
-    ipc(call);
-    return (AsyncGet<T, Exception>) ProtobufRpcEngine2.getAsyncReturnMessage();
-  }
-
-  public static <T> void asyncResponse(Response<T> response) {
-    CompletableFuture<T> callCompletableFuture =
-        (CompletableFuture<T>) Client.CALL_FUTURE_THREAD_LOCAL.get();
-    // transfer originCall & callerContext to worker threads of executor.
-    final Server.Call originCall = Server.getCurCall().get();
-    final CallerContext originContext = CallerContext.getCurrent();
-    CompletableFuture<Object> result = callCompletableFuture.thenApplyAsync(t -> {
-      try {
-        Server.getCurCall().set(originCall);
-        CallerContext.setCurrent(originContext);
-        return response.response();
-      }catch (Exception e) {
-        throw new CompletionException(e);
-      }
-    });
-    Async.CUR_COMPLETABLE_FUTURE.set(result);
-  }
-
-  @FunctionalInterface
-  interface Response<T> {
-    T response() throws Exception;
   }
 }

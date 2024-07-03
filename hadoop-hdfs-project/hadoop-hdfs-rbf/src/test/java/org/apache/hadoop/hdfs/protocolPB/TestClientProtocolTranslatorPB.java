@@ -40,7 +40,7 @@ public class TestClientProtocolTranslatorPB implements TestClientProtocol, Close
         .build();
 
     AsyncRpcProtocolPBUtil.asyncIpcClient(() -> rpcProxy.ping(null, req),
-        res -> null, null);
+        res -> null, Void.class);
   }
 
   @Override
@@ -59,7 +59,7 @@ public class TestClientProtocolTranslatorPB implements TestClientProtocol, Close
         .build();
 
     AsyncRpcProtocolPBUtil.asyncIpcClient(() -> rpcProxy.error(null, req),
-        res -> null, null);
+        res -> null, Void.class);
   }
 
   @Override

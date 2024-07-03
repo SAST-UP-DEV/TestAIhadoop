@@ -22,12 +22,10 @@ import org.apache.hadoop.ipc.Client;
 import org.apache.hadoop.tools.proto.GetUserMappingsProtocolProtos;
 import org.apache.hadoop.tools.protocolPB.GetUserMappingsProtocolClientSideTranslatorPB;
 import org.apache.hadoop.tools.protocolPB.GetUserMappingsProtocolPB;
-import org.apache.hadoop.util.concurrent.AsyncGet;
 
 import java.io.IOException;
 
-import static org.apache.hadoop.hdfs.protocolPB.AsyncRpcProtocolPBUtil.asyncIpc;
-import static org.apache.hadoop.hdfs.protocolPB.AsyncRpcProtocolPBUtil.asyncResponse;
+import static org.apache.hadoop.hdfs.protocolPB.AsyncRpcProtocolPBUtil.asyncIpcClient;
 
 public class RouterGetUserMappingsProtocolTranslatorPB
     extends GetUserMappingsProtocolClientSideTranslatorPB {
@@ -46,12 +44,9 @@ public class RouterGetUserMappingsProtocolTranslatorPB
     GetUserMappingsProtocolProtos.GetGroupsForUserRequestProto request =
         GetUserMappingsProtocolProtos.GetGroupsForUserRequestProto
         .newBuilder().setUser(user).build();
-    AsyncGet<GetUserMappingsProtocolProtos.GetGroupsForUserResponseProto, Exception> asyncGet =
-        asyncIpc(() -> rpcProxy.getGroupsForUser(NULL_CONTROLLER, request));
-    asyncResponse(() -> {
-      GetUserMappingsProtocolProtos.GetGroupsForUserResponseProto resp = asyncGet.get(-1, null);
-      return resp.getGroupsList().toArray(new String[resp.getGroupsCount()]);
-    });
-    return null;
+
+    return asyncIpcClient(() -> rpcProxy.getGroupsForUser(null, request),
+        res -> res.getGroupsList().toArray(new String[res.getGroupsCount()]),
+        String[].class);
   }
 }

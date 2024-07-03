@@ -32,14 +32,9 @@ import org.apache.hadoop.hdfs.server.protocol.NamenodeRegistration;
 import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
 import org.apache.hadoop.hdfs.server.protocol.RemoteEditLogManifest;
 import org.apache.hadoop.ipc.Client;
-import org.apache.hadoop.util.concurrent.AsyncGet;
-import org.apache.hadoop.hdfs.protocol.proto.NamenodeProtocolProtos.GetMostRecentNameNodeFileTxIdResponseProto;
-
 
 import java.io.IOException;
-import org.apache.hadoop.hdfs.protocolPB.AsyncRpcProtocolPBUtil.Response;
-import static org.apache.hadoop.hdfs.protocolPB.AsyncRpcProtocolPBUtil.asyncIpc;
-import static org.apache.hadoop.hdfs.protocolPB.AsyncRpcProtocolPBUtil.asyncResponse;
+import static org.apache.hadoop.hdfs.protocolPB.AsyncRpcProtocolPBUtil.asyncIpcClient;
 
 public class RouterNamenodeProtocolTranslatorPB extends NamenodeProtocolTranslatorPB{
   private final NamenodeProtocolPB rpcProxy;
@@ -65,11 +60,9 @@ public class RouterNamenodeProtocolTranslatorPB extends NamenodeProtocolTranslat
     }
     NamenodeProtocolProtos.GetBlocksRequestProto req = builder.build();
 
-    AsyncGet<NamenodeProtocolProtos.GetBlocksResponseProto, Exception> asyncGet =
-        asyncIpc(() -> rpcProxy.getBlocks(NULL_CONTROLLER, req));
-    asyncResponse(() -> PBHelper.convert(
-        asyncGet.get(-1, null).getBlocks()));
-    return null;
+    return asyncIpcClient(() -> rpcProxy.getBlocks(NULL_CONTROLLER, req),
+        res -> PBHelper.convert(res.getBlocks()),
+        BlocksWithLocations.class);
   }
 
   @Override
@@ -77,15 +70,11 @@ public class RouterNamenodeProtocolTranslatorPB extends NamenodeProtocolTranslat
     if (!Client.isAsynchronousMode()) {
       return super.getBlockKeys();
     }
-    AsyncGet<NamenodeProtocolProtos.GetBlockKeysResponseProto, Exception> asyncGet =
-        asyncIpc(() ->
-            rpcProxy.getBlockKeys(NULL_CONTROLLER, VOID_GET_BLOCKKEYS_REQUEST));
-    asyncResponse(() -> {
-      NamenodeProtocolProtos.GetBlockKeysResponseProto rsp =
-          asyncGet.get(-1, null);
-      return rsp.hasKeys() ? PBHelper.convert(rsp.getKeys()) : null;
-    });
-    return null;
+
+    return asyncIpcClient(() -> rpcProxy.getBlockKeys(NULL_CONTROLLER,
+            VOID_GET_BLOCKKEYS_REQUEST),
+        res -> res.hasKeys() ? PBHelper.convert(res.getKeys()) : null,
+        ExportedBlockKeys.class);
   }
 
   @Override
@@ -93,11 +82,10 @@ public class RouterNamenodeProtocolTranslatorPB extends NamenodeProtocolTranslat
     if (!Client.isAsynchronousMode()) {
       return super.getTransactionID();
     }
-    AsyncGet<NamenodeProtocolProtos.GetTransactionIdResponseProto, Exception> asyncGet =
-        asyncIpc(() -> rpcProxy.getTransactionId(NULL_CONTROLLER,
-            VOID_GET_TRANSACTIONID_REQUEST));
-    asyncResponse(() -> asyncGet.get(-1, null).getTxId());
-    return -1;
+
+    return asyncIpcClient(() -> rpcProxy.getTransactionId(NULL_CONTROLLER,
+            VOID_GET_TRANSACTIONID_REQUEST),
+        res -> res.getTxId(), Long.class);
   }
 
   @Override
@@ -105,11 +93,12 @@ public class RouterNamenodeProtocolTranslatorPB extends NamenodeProtocolTranslat
     if (!Client.isAsynchronousMode()) {
       return super.getMostRecentCheckpointTxId();
     }
-    AsyncGet<NamenodeProtocolProtos.GetMostRecentCheckpointTxIdResponseProto, Exception> asyncGet =
-        asyncIpc(() -> rpcProxy.getMostRecentCheckpointTxId(NULL_CONTROLLER,
-            NamenodeProtocolProtos.GetMostRecentCheckpointTxIdRequestProto.getDefaultInstance()));
-    asyncResponse((Response<Object>) () -> asyncGet.get(-1, null).getTxId());
-    return -1;
+
+    return asyncIpcClient(() -> rpcProxy.getMostRecentCheckpointTxId(NULL_CONTROLLER,
+            NamenodeProtocolProtos
+                .GetMostRecentCheckpointTxIdRequestProto
+                .getDefaultInstance()),
+        res -> res.getTxId(), Long.class);
   }
 
   @Override
@@ -117,12 +106,14 @@ public class RouterNamenodeProtocolTranslatorPB extends NamenodeProtocolTranslat
     if (!Client.isAsynchronousMode()) {
       return super.getMostRecentNameNodeFileTxId(nnf);
     }
-    AsyncGet<GetMostRecentNameNodeFileTxIdResponseProto, Exception> asyncGet =
-        asyncIpc(() -> rpcProxy.getMostRecentNameNodeFileTxId(NULL_CONTROLLER,
-            NamenodeProtocolProtos.GetMostRecentNameNodeFileTxIdRequestProto.newBuilder()
-                .setNameNodeFile(nnf.toString()).build()));
-    asyncResponse(() -> asyncGet.get(-1, null).getTxId());
-    return -1;
+
+    return asyncIpcClient(() -> rpcProxy.getMostRecentNameNodeFileTxId(NULL_CONTROLLER,
+            NamenodeProtocolProtos
+                .GetMostRecentNameNodeFileTxIdRequestProto
+                .newBuilder()
+                .setNameNodeFile(nnf.toString())
+                .build()),
+        res -> res.getTxId(), Long.class);
   }
 
   @Override
@@ -130,11 +121,10 @@ public class RouterNamenodeProtocolTranslatorPB extends NamenodeProtocolTranslat
     if (!Client.isAsynchronousMode()) {
       return super.rollEditLog();
     }
-    AsyncGet<NamenodeProtocolProtos.RollEditLogResponseProto, Exception> asyncGet =
-        asyncIpc(() -> rpcProxy.rollEditLog(NULL_CONTROLLER,
-            VOID_ROLL_EDITLOG_REQUEST));
-    asyncResponse(() -> PBHelper.convert(asyncGet.get(-1, null).getSignature()));
-    return null;
+
+    return asyncIpcClient(() -> rpcProxy.rollEditLog(NULL_CONTROLLER,
+        VOID_ROLL_EDITLOG_REQUEST),
+        res -> PBHelper.convert(res.getSignature()), CheckpointSignature.class);
   }
 
   @Override
@@ -142,11 +132,10 @@ public class RouterNamenodeProtocolTranslatorPB extends NamenodeProtocolTranslat
     if (!Client.isAsynchronousMode()) {
       return super.versionRequest();
     }
-    AsyncGet<HdfsServerProtos.VersionResponseProto, Exception> asyncGet =
-        asyncIpc(() -> rpcProxy.versionRequest(NULL_CONTROLLER,
-            VOID_VERSION_REQUEST));
-    asyncResponse(() -> PBHelper.convert(asyncGet.get(-1, null).getInfo()));
-    return null;
+    return asyncIpcClient(() -> rpcProxy.versionRequest(NULL_CONTROLLER,
+            VOID_VERSION_REQUEST),
+        res -> PBHelper.convert(res.getInfo()),
+        NamespaceInfo.class);
   }
 
   @Override
@@ -160,12 +149,9 @@ public class RouterNamenodeProtocolTranslatorPB extends NamenodeProtocolTranslat
         NamenodeProtocolProtos.ErrorReportRequestProto.newBuilder()
         .setErrorCode(errorCode).setMsg(msg)
         .setRegistration(PBHelper.convert(registration)).build();
-    AsyncGet<NamenodeProtocolProtos.ErrorReportResponseProto, Exception> asyncGet =
-        asyncIpc(() -> rpcProxy.errorReport(NULL_CONTROLLER, req));
-    asyncResponse(() -> {
-      asyncGet.get(-1, null);
-      return null;
-    });
+
+    asyncIpcClient(() -> rpcProxy.errorReport(NULL_CONTROLLER, req),
+        res -> null, Void.class);
   }
 
   @Override
@@ -177,10 +163,10 @@ public class RouterNamenodeProtocolTranslatorPB extends NamenodeProtocolTranslat
     NamenodeProtocolProtos.RegisterRequestProto req =
         NamenodeProtocolProtos.RegisterRequestProto.newBuilder()
         .setRegistration(PBHelper.convert(registration)).build();
-    AsyncGet<NamenodeProtocolProtos.RegisterResponseProto, Exception> asyncGet =
-        asyncIpc(() -> rpcProxy.registerSubordinateNamenode(NULL_CONTROLLER, req));
-    asyncResponse(() -> PBHelper.convert(asyncGet.get(-1, null).getRegistration()));
-    return null;
+
+    return asyncIpcClient(() -> rpcProxy.registerSubordinateNamenode(NULL_CONTROLLER, req),
+        res -> PBHelper.convert(res.getRegistration()),
+        NamenodeRegistration.class);
   }
 
   @Override
@@ -192,14 +178,12 @@ public class RouterNamenodeProtocolTranslatorPB extends NamenodeProtocolTranslat
     NamenodeProtocolProtos.StartCheckpointRequestProto req =
         NamenodeProtocolProtos.StartCheckpointRequestProto.newBuilder()
         .setRegistration(PBHelper.convert(registration)).build();
-    AsyncGet<NamenodeProtocolProtos.StartCheckpointResponseProto, Exception> asyncGet =
-        asyncIpc(() -> rpcProxy.startCheckpoint(NULL_CONTROLLER, req));
-    asyncResponse(() -> {
-      HdfsServerProtos.NamenodeCommandProto cmd =
-          asyncGet.get(-1, null).getCommand();
-      return PBHelper.convert(cmd);
-    });
-    return null;
+
+    return asyncIpcClient(() -> rpcProxy.startCheckpoint(NULL_CONTROLLER, req),
+        res -> {
+          HdfsServerProtos.NamenodeCommandProto cmd = res.getCommand();
+          return PBHelper.convert(cmd);
+        }, NamenodeCommand.class);
   }
 
   @Override
@@ -213,12 +197,9 @@ public class RouterNamenodeProtocolTranslatorPB extends NamenodeProtocolTranslat
         NamenodeProtocolProtos.EndCheckpointRequestProto.newBuilder()
         .setRegistration(PBHelper.convert(registration))
         .setSignature(PBHelper.convert(sig)).build();
-    AsyncGet<NamenodeProtocolProtos.EndCheckpointResponseProto, Exception> asyncGet
-        = asyncIpc(() -> rpcProxy.endCheckpoint(NULL_CONTROLLER, req));
-    asyncResponse(() -> {
-      asyncGet.get(-1, null);
-      return null;
-    });
+
+    asyncIpcClient(() -> rpcProxy.endCheckpoint(NULL_CONTROLLER, req),
+        res -> null, Void.class);
   }
 
   @Override
@@ -230,10 +211,9 @@ public class RouterNamenodeProtocolTranslatorPB extends NamenodeProtocolTranslat
     NamenodeProtocolProtos.GetEditLogManifestRequestProto req =
         NamenodeProtocolProtos.GetEditLogManifestRequestProto
         .newBuilder().setSinceTxId(sinceTxId).build();
-    AsyncGet<NamenodeProtocolProtos.GetEditLogManifestResponseProto, Exception> asyncGet =
-        asyncIpc(() -> rpcProxy.getEditLogManifest(NULL_CONTROLLER, req));
-    asyncResponse(() -> PBHelper.convert(asyncGet.get(-1, null).getManifest()));
-    return null;
+
+    return asyncIpcClient(() -> rpcProxy.getEditLogManifest(NULL_CONTROLLER, req),
+        res -> PBHelper.convert(res.getManifest()), RemoteEditLogManifest.class);
   }
 
   @Override
@@ -244,10 +224,9 @@ public class RouterNamenodeProtocolTranslatorPB extends NamenodeProtocolTranslat
     NamenodeProtocolProtos.IsUpgradeFinalizedRequestProto req =
         NamenodeProtocolProtos.IsUpgradeFinalizedRequestProto
         .newBuilder().build();
-    AsyncGet<NamenodeProtocolProtos.IsUpgradeFinalizedResponseProto, Exception> asyncGet =
-        asyncIpc(() -> rpcProxy.isUpgradeFinalized(NULL_CONTROLLER, req));
-    asyncResponse(() -> asyncGet.get(-1, null).getIsUpgradeFinalized());
-    return false;
+
+    return asyncIpcClient(() -> rpcProxy.isUpgradeFinalized(NULL_CONTROLLER, req),
+        res -> res.getIsUpgradeFinalized(), Boolean.class);
   }
 
   @Override
@@ -258,10 +237,9 @@ public class RouterNamenodeProtocolTranslatorPB extends NamenodeProtocolTranslat
     NamenodeProtocolProtos.IsRollingUpgradeRequestProto req =
         NamenodeProtocolProtos.IsRollingUpgradeRequestProto
         .newBuilder().build();
-    AsyncGet<NamenodeProtocolProtos.IsRollingUpgradeResponseProto, Exception> asyncGet =
-        asyncIpc(() -> rpcProxy.isRollingUpgrade(NULL_CONTROLLER, req));
-    asyncResponse(() -> asyncGet.get(-1, null).getIsRollingUpgrade());
-    return false;
+
+    return asyncIpcClient(() -> rpcProxy.isRollingUpgrade(NULL_CONTROLLER, req),
+        res -> res.getIsRollingUpgrade(), Boolean.class);
   }
 
   @Override
@@ -271,13 +249,8 @@ public class RouterNamenodeProtocolTranslatorPB extends NamenodeProtocolTranslat
     }
     NamenodeProtocolProtos.GetNextSPSPathRequestProto req =
         NamenodeProtocolProtos.GetNextSPSPathRequestProto.newBuilder().build();
-    AsyncGet<NamenodeProtocolProtos.GetNextSPSPathResponseProto, Exception> ayncGet =
-        asyncIpc(() -> rpcProxy.getNextSPSPath(NULL_CONTROLLER, req));
-    asyncResponse(() -> {
-      NamenodeProtocolProtos.GetNextSPSPathResponseProto nextSPSPath =
-          ayncGet.get(-1, null);
-      return nextSPSPath.hasSpsPath() ? nextSPSPath.getSpsPath() : null;
-    });
-    return null;
+
+    return asyncIpcClient(() -> rpcProxy.getNextSPSPath(NULL_CONTROLLER, req),
+        res -> res.hasSpsPath() ? res.getSpsPath() : null, Long.class);
   }
 }
