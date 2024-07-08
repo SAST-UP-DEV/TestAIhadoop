@@ -1409,7 +1409,7 @@ public class S3AInputStream extends FSInputStream implements  CanSetReadahead,
      * @return the response
      */
     @Retries.OnceRaw
-    ResponseInputStream<GetObjectResponse> getObject(GetObjectRequest request);
+    ResponseInputStream<GetObjectResponse> getObject(GetObjectRequest request) throws IOException;
 
     /**
      * Submit some asynchronous work, for example, draining a stream.

@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 
+import org.apache.hadoop.fs.s3a.impl.CSEMaterials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.core.interceptor.ExecutionInterceptor;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
@@ -117,6 +118,13 @@ public interface S3ClientFactory {
      * the client.
      */
     private StatisticsFromAwsSdk metrics;
+
+    private Boolean isCSEEnabled = false;
+
+    /**
+     * Client side encryption materials.
+     */
+    private CSEMaterials cseMaterials;
 
     /**
      * Use (deprecated) path style access.
@@ -426,6 +434,44 @@ public interface S3ClientFactory {
         final String value) {
       region = value;
       return this;
+    }
+
+    /**
+     * Set the client side encryption flag.
+     *
+     * @param value new value
+     * @return the builder
+     */
+    public S3ClientCreationParameters withClientSideEncryptionEnabled(final boolean value) {
+      this.isCSEEnabled = value;
+      return this;
+    }
+
+    /**
+     * Get the client side encryption flag.
+     * @return client side encryption flag
+     */
+    public boolean isClientSideEncryptionEnabled() {
+      return this.isCSEEnabled;
+    }
+
+    /**
+     * Set the client side encryption materials.
+     *
+     * @param value new value
+     * @return the builder
+     */
+    public S3ClientCreationParameters withClientSideEncryptionMaterials(final CSEMaterials value) {
+      this.cseMaterials = value;
+      return this;
+    }
+
+    /**
+     * Get the client side encryption materials.
+     * @return client side encryption materials
+     */
+    public CSEMaterials getClientSideEncryptionMaterials() {
+      return this.cseMaterials;
     }
 
     /**

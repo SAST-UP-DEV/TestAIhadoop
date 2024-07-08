@@ -61,6 +61,8 @@ public class ClientManagerImpl implements ClientManager {
    */
   private final S3ClientFactory clientFactory;
 
+  private final S3ClientFactory unencryptedClientFactory;
+
   /**
    * Closed flag.
    */
@@ -84,6 +86,8 @@ public class ClientManagerImpl implements ClientManager {
   /** Async client is used for transfer manager. */
   private final LazyAutoCloseableReference<S3AsyncClient> s3AsyncClient;
 
+  private final LazyAutoCloseableReference<S3Client> unencryptedS3Client;
+
   /** Transfer manager. */
   private final LazyAutoCloseableReference<S3TransferManager> transferManager;
 
@@ -91,18 +95,22 @@ public class ClientManagerImpl implements ClientManager {
    * Constructor.
    * This does not create any clients.
    * @param clientFactory client factory to invoke
+   * @param unencryptedClientFactory client factory to invoke
    * @param clientCreationParameters creation parameters.
    * @param durationTrackerFactory duration tracker.
    */
   public ClientManagerImpl(
       final S3ClientFactory clientFactory,
+      final S3ClientFactory unencryptedClientFactory,
       final S3ClientFactory.S3ClientCreationParameters clientCreationParameters,
       final DurationTrackerFactory durationTrackerFactory) {
     this.clientFactory = requireNonNull(clientFactory);
+    this.unencryptedClientFactory = unencryptedClientFactory;
     this.clientCreationParameters = requireNonNull(clientCreationParameters);
     this.durationTrackerFactory = requireNonNull(durationTrackerFactory);
     this.s3Client = new LazyAutoCloseableReference<>(createS3Client());
     this.s3AsyncClient = new LazyAutoCloseableReference<>(createAyncClient());
+    this.unencryptedS3Client = new LazyAutoCloseableReference<>(createUnencryptedS3Client());
     this.transferManager = new LazyAutoCloseableReference<>(createTransferManager());
   }
 
@@ -128,6 +136,13 @@ public class ClientManagerImpl implements ClientManager {
         () -> clientFactory.createS3AsyncClient(getUri(), clientCreationParameters));
   }
 
+  private CallableRaisingIOE<S3Client> createUnencryptedS3Client() {
+    return trackDurationOfOperation(
+        durationTrackerFactory,
+        STORE_CLIENT_CREATION.getSymbol(),
+        () -> unencryptedClientFactory.createS3Client(getUri(), clientCreationParameters));
+  }
+
   /**
    * Create the function to create the Transfer Manager.
    * @return a callable which will create the component.
@@ -151,6 +166,12 @@ public class ClientManagerImpl implements ClientManager {
   public synchronized S3AsyncClient getOrCreateAsyncClient() throws IOException {
     checkNotClosed();
     return s3AsyncClient.eval();
+  }
+
+  @Override
+  public synchronized S3Client getOrCreateUnencryptedS3Client() throws IOException {
+    checkNotClosed();
+    return unencryptedS3Client.eval();
   }
 
   @Override
@@ -184,6 +205,7 @@ public class ClientManagerImpl implements ClientManager {
     l.add(closeAsync(transferManager));
     l.add(closeAsync(s3AsyncClient));
     l.add(closeAsync(s3Client));
+    l.add(closeAsync(unencryptedS3Client));
 
     // once all are queued, await their completion
     // and swallow any exception.
@@ -232,6 +254,7 @@ public class ClientManagerImpl implements ClientManager {
         "closed=" + closed.get() +
         ", s3Client=" + s3Client +
         ", s3AsyncClient=" + s3AsyncClient +
+        ", unencryptedS3Client=" + unencryptedS3Client +
         ", transferManager=" + transferManager +
         '}';
   }

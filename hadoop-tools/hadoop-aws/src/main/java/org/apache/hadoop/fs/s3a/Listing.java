@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.fs.s3a;
 
+import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CommonPrefix;
 import software.amazon.awssdk.services.s3.model.S3Object;
 
@@ -51,6 +52,10 @@ import java.util.concurrent.CompletableFuture;
 import java.util.StringJoiner;
 
 import static org.apache.hadoop.fs.s3a.Constants.S3N_FOLDER_SUFFIX;
+import static org.apache.hadoop.fs.s3a.Constants.S3_ENCRYPTION_CSE_OBJECT_SIZE_FROM_RANGED_GET_ENABLED;
+import static org.apache.hadoop.fs.s3a.Constants.S3_ENCRYPTION_CSE_OBJECT_SIZE_FROM_RANGED_GET_ENABLED_DEFAULT;
+import static org.apache.hadoop.fs.s3a.Constants.S3_ENCRYPTION_CSE_READ_UNENCRYPTED_OBJECTS;
+import static org.apache.hadoop.fs.s3a.Constants.S3_ENCRYPTION_CSE_READ_UNENCRYPTED_OBJECTS_DEFAULT;
 import static org.apache.hadoop.fs.s3a.Invoker.onceInTheFuture;
 import static org.apache.hadoop.fs.s3a.S3AUtils.ACCEPT_ALL;
 import static org.apache.hadoop.fs.s3a.S3AUtils.createFileStatus;
@@ -58,6 +63,7 @@ import static org.apache.hadoop.fs.s3a.S3AUtils.maybeAddTrailingSlash;
 import static org.apache.hadoop.fs.s3a.S3AUtils.objectRepresentsDirectory;
 import static org.apache.hadoop.fs.s3a.S3AUtils.stringify;
 import static org.apache.hadoop.fs.s3a.auth.RoleModel.pathToKey;
+import static org.apache.hadoop.fs.s3a.impl.CSEUtils.isCSEInstructionFile;
 import static org.apache.hadoop.fs.statistics.StoreStatisticNames.OBJECT_CONTINUE_LIST_REQUEST;
 import static org.apache.hadoop.fs.statistics.StoreStatisticNames.OBJECT_LIST_REQUEST;
 import static org.apache.hadoop.fs.statistics.impl.IOStatisticsBinding.iostatisticsStore;
@@ -76,6 +82,8 @@ public class Listing extends AbstractStoreOperation {
 
   private static final Logger LOG = S3AFileSystem.LOG;
   private final boolean isCSEEnabled;
+  private final S3Client s3Client;
+  private final boolean skipCSEInstructionFile;
 
   static final FileStatusAcceptor ACCEPT_ALL_BUT_S3N =
       new AcceptAllButS3nDirs();
@@ -83,10 +91,12 @@ public class Listing extends AbstractStoreOperation {
   private final ListingOperationCallbacks listingOperationCallbacks;
 
   public Listing(ListingOperationCallbacks listingOperationCallbacks,
-      StoreContext storeContext) {
+      StoreContext storeContext, S3Client s3Client, boolean skipCSEInstructionFile) {
     super(storeContext);
     this.listingOperationCallbacks = listingOperationCallbacks;
     this.isCSEEnabled = storeContext.isCSEEnabled();
+    this.skipCSEInstructionFile = skipCSEInstructionFile;
+    this.s3Client = s3Client;
   }
 
   /**
@@ -237,7 +247,7 @@ public class Listing extends AbstractStoreOperation {
             listingOperationCallbacks
                 .createListObjectsRequest(key, "/", span),
             filter,
-            new AcceptAllButSelfAndS3nDirs(dir),
+            new AcceptAllButSelfAndS3nDirs(dir, skipCSEInstructionFile),
             span));
   }
 
@@ -266,7 +276,7 @@ public class Listing extends AbstractStoreOperation {
         path,
         request,
         ACCEPT_ALL,
-        new AcceptAllButSelfAndS3nDirs(path),
+        new AcceptAllButSelfAndS3nDirs(path, skipCSEInstructionFile),
         span);
   }
 
@@ -447,7 +457,7 @@ public class Listing extends AbstractStoreOperation {
      * @param objects the next object listing
      * @return true if this added any entries after filtering
      */
-    private boolean buildNextStatusBatch(S3ListResult objects) {
+    private boolean buildNextStatusBatch(S3ListResult objects) throws IOException {
       // counters for debug logs
       int added = 0, ignored = 0;
       // list to fill in with results. Initial size will be list maximum.
@@ -464,9 +474,15 @@ public class Listing extends AbstractStoreOperation {
         // Skip over keys that are ourselves and old S3N _$folder$ files
         if (acceptor.accept(keyPath, s3Object) && filter.accept(keyPath)) {
           S3AFileStatus status = createFileStatus(keyPath, s3Object,
-                  listingOperationCallbacks.getDefaultBlockSize(keyPath),
-                  getStoreContext().getUsername(),
-                  s3Object.eTag(), null, isCSEEnabled);
+              listingOperationCallbacks.getDefaultBlockSize(keyPath),
+              getStoreContext().getUsername(), s3Object.eTag(), null,
+              s3Client, isCSEEnabled, getStoreContext().getBucket(),
+                  getStoreContext().getConfiguration()
+                      .getBoolean(S3_ENCRYPTION_CSE_OBJECT_SIZE_FROM_RANGED_GET_ENABLED,
+                          S3_ENCRYPTION_CSE_OBJECT_SIZE_FROM_RANGED_GET_ENABLED_DEFAULT),
+              getStoreContext().getConfiguration()
+                  .getBoolean(S3_ENCRYPTION_CSE_READ_UNENCRYPTED_OBJECTS,
+                      S3_ENCRYPTION_CSE_READ_UNENCRYPTED_OBJECTS_DEFAULT));
           LOG.debug("Adding: {}", status);
           stats.add(status);
           added++;
@@ -726,9 +742,11 @@ public class Listing extends AbstractStoreOperation {
    */
   static class AcceptFilesOnly implements FileStatusAcceptor {
     private final Path qualifiedPath;
+    private final boolean skipCSEInstructionFile;
 
-    public AcceptFilesOnly(Path qualifiedPath) {
+    AcceptFilesOnly(Path qualifiedPath, boolean skipCSEInstructionFile) {
       this.qualifiedPath = qualifiedPath;
+      this.skipCSEInstructionFile = skipCSEInstructionFile;
     }
 
     /**
@@ -743,6 +761,7 @@ public class Listing extends AbstractStoreOperation {
     public boolean accept(Path keyPath, S3Object s3Object) {
       return !keyPath.equals(qualifiedPath)
           && !s3Object.key().endsWith(S3N_FOLDER_SUFFIX)
+          && isCSEInstructionFile(skipCSEInstructionFile, s3Object.key())
           && !objectRepresentsDirectory(s3Object.key());
     }
 
@@ -768,16 +787,29 @@ public class Listing extends AbstractStoreOperation {
    */
   static class AcceptAllButS3nDirs implements FileStatusAcceptor {
 
+    private final boolean skipCSEInstructionFile;
+
+    AcceptAllButS3nDirs(boolean skipCSEInstructionFile) {
+      this.skipCSEInstructionFile = skipCSEInstructionFile;
+    }
+
+    AcceptAllButS3nDirs() {
+      skipCSEInstructionFile = false;
+    }
+
     public boolean accept(Path keyPath, S3Object s3Object) {
-      return !s3Object.key().endsWith(S3N_FOLDER_SUFFIX);
+      return !s3Object.key().endsWith(S3N_FOLDER_SUFFIX) &&
+          isCSEInstructionFile(skipCSEInstructionFile, s3Object.key());
     }
 
     public boolean accept(Path keyPath, String prefix) {
-      return !keyPath.toString().endsWith(S3N_FOLDER_SUFFIX);
+      return !keyPath.toString().endsWith(S3N_FOLDER_SUFFIX) &&
+          isCSEInstructionFile(skipCSEInstructionFile, keyPath.toString());
     }
 
     public boolean accept(FileStatus status) {
-      return !status.getPath().toString().endsWith(S3N_FOLDER_SUFFIX);
+      return !status.getPath().toString().endsWith(S3N_FOLDER_SUFFIX)
+              && isCSEInstructionFile(skipCSEInstructionFile, status.getPath().toString());
     }
 
   }
@@ -790,13 +822,16 @@ public class Listing extends AbstractStoreOperation {
 
     /** Base path. */
     private final Path qualifiedPath;
+    private final boolean skipCSEInstructionFile;
 
     /**
      * Constructor.
      * @param qualifiedPath an already-qualified path.
+     * @param skipCSEInstructionFile whether to skip instruction files when cse is enabled
      */
-    public AcceptAllButSelfAndS3nDirs(Path qualifiedPath) {
+    public AcceptAllButSelfAndS3nDirs(Path qualifiedPath, boolean skipCSEInstructionFile) {
       this.qualifiedPath = qualifiedPath;
+      this.skipCSEInstructionFile = skipCSEInstructionFile;
     }
 
     /**
@@ -810,7 +845,8 @@ public class Listing extends AbstractStoreOperation {
     @Override
     public boolean accept(Path keyPath, S3Object s3Object) {
       return !keyPath.equals(qualifiedPath) &&
-          !s3Object.key().endsWith(S3N_FOLDER_SUFFIX);
+          !s3Object.key().endsWith(S3N_FOLDER_SUFFIX) &&
+          isCSEInstructionFile(skipCSEInstructionFile, s3Object.key());
     }
 
     /**
@@ -822,12 +858,14 @@ public class Listing extends AbstractStoreOperation {
      */
     @Override
     public boolean accept(Path keyPath, String prefix) {
-      return !keyPath.equals(qualifiedPath);
+      return !keyPath.equals(qualifiedPath) &&
+          isCSEInstructionFile(skipCSEInstructionFile, keyPath.toString());
     }
 
     @Override
     public boolean accept(FileStatus status) {
-      return (status != null) && !status.getPath().equals(qualifiedPath);
+      return (status != null) && !status.getPath().equals(qualifiedPath)
+              && isCSEInstructionFile(skipCSEInstructionFile, status.getPath().toString());
     }
   }
 
