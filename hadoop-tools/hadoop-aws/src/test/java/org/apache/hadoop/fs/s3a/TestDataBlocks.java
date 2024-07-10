@@ -19,6 +19,8 @@
 package org.apache.hadoop.fs.s3a;
 
 import org.apache.hadoop.fs.contract.ContractTestUtils;
+import org.apache.hadoop.fs.store.ByteBufferInputStream;
+
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -66,9 +68,8 @@ public class TestDataBlocks extends Assert {
 
       // now start the write
       S3ADataBlocks.BlockUploadData blockUploadData = block.startUpload();
-      S3ADataBlocks.ByteBufferBlockFactory.ByteBufferBlock.ByteBufferInputStream
-          stream =
-          (S3ADataBlocks.ByteBufferBlockFactory.ByteBufferBlock.ByteBufferInputStream)
+      ByteBufferInputStream stream =
+          (ByteBufferInputStream)
               blockUploadData.getUploadStream();
       assertTrue("Mark not supported in " + stream, stream.markSupported());
       assertTrue("!hasRemaining() in " + stream, stream.hasRemaining());
