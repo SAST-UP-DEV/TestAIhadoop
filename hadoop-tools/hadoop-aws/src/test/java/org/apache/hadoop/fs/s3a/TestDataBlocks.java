@@ -19,6 +19,7 @@
 package org.apache.hadoop.fs.s3a;
 
 import org.apache.hadoop.fs.contract.ContractTestUtils;
+import org.apache.hadoop.fs.s3a.impl.UploadContentProviders;
 import org.apache.hadoop.fs.store.ByteBufferInputStream;
 
 import org.junit.Assert;
@@ -68,9 +69,10 @@ public class TestDataBlocks extends Assert {
 
       // now start the write
       S3ADataBlocks.BlockUploadData blockUploadData = block.startUpload();
+      final UploadContentProviders.BaseContentProvider cp =
+          blockUploadData.getContentProvider();
       ByteBufferInputStream stream =
-          (ByteBufferInputStream)
-              blockUploadData.getUploadStream();
+          (ByteBufferInputStream) cp.newStream();
       assertTrue("Mark not supported in " + stream, stream.markSupported());
       assertTrue("!hasRemaining() in " + stream, stream.hasRemaining());
       int expected = bufferLen;

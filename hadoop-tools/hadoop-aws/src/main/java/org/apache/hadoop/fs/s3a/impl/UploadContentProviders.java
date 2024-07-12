@@ -20,9 +20,11 @@ package org.apache.hadoop.fs.s3a.impl;
 
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
+import java.io.Closeable;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
@@ -59,10 +61,15 @@ public final class UploadContentProviders {
    * Create a content provider for a file.
    * @param file file to read.
    * @param offset offset in file.
+   * @param size  size of date to read
    * @return the provider
    * @throws IllegalArgumentException if the offset is negative.
    */
-  public static ContentStreamProvider fileContentProvider(File file, long offset, final int size) {
+  public static BaseContentProvider<BufferedInputStream> fileContentProvider(
+      File file,
+      long offset,
+      final int size) {
+
     return new FileWithOffsetContentProvider(file, offset, size);
   }
 
@@ -74,13 +81,15 @@ public final class UploadContentProviders {
    * @throws IllegalArgumentException if the arguments are invalid.
    * @throws NullPointerException if the buffer is null
    */
-  public static ContentStreamProvider byteBufferContentProvider(
-      final ByteBuffer byteBuffer, final int size) {
+  public static BaseContentProvider<ByteBufferInputStream> byteBufferContentProvider(
+      final ByteBuffer byteBuffer,
+      final int size) {
+
     return new ByteBufferContentProvider(byteBuffer, size);
   }
 
   /**
-   * Create a content provider for a file.
+   * Create a content provider for all or part of a byte array.
    * @param bytes buffer to read.
    * @param offset offset in buffer.
    * @param size size of the data.
@@ -88,9 +97,20 @@ public final class UploadContentProviders {
    * @throws IllegalArgumentException if the arguments are invalid.
    * @throws NullPointerException if the buffer is null.
    */
-  public static ContentStreamProvider byteArrayContentProvider(
+  public static BaseContentProvider<ByteArrayInputStream> byteArrayContentProvider(
       final byte[] bytes, final int offset, final int size) {
     return new ByteArrayContentProvider(bytes, offset, size);
+  }
+  /**
+   * Create a content provider for all of a byte array.
+   * @param bytes buffer to read.
+   * @return the provider
+   * @throws IllegalArgumentException if the arguments are invalid.
+   * @throws NullPointerException if the buffer is null.
+   */
+  public static BaseContentProvider<ByteArrayInputStream> byteArrayContentProvider(
+      final byte[] bytes) {
+    return byteArrayContentProvider(bytes, 0, bytes.length);
   }
 
   /**
@@ -101,7 +121,7 @@ public final class UploadContentProviders {
    */
   @VisibleForTesting
   public static abstract class BaseContentProvider<T extends InputStream>
-      implements ContentStreamProvider {
+      implements ContentStreamProvider, Closeable {
 
     /**
      * Size of the data.
@@ -131,13 +151,22 @@ public final class UploadContentProviders {
     }
 
     /**
+     * Close the current stream.
+     */
+    @Override
+    public void close() {
+      cleanupWithLogger(LOG, getCurrentStream());
+      setCurrentStream(null);
+    }
+
+    /**
      * Note that a stream was created.
      * Logs if this is a subsequent event as it implies a failure of the first attempt.
      * @return the new stream
      */
     @Override
     public final InputStream newStream() {
-      cleanupWithLogger(LOG, getCurrentStream());
+      close();
       streamCreationCount++;
       if (streamCreationCount > 1) {
         LOG.info("Stream created more than once: {}", this);
@@ -160,10 +189,9 @@ public final class UploadContentProviders {
     }
 
     /**
-     * Size constructor parameter.
+     * Size as set by constructor parameter.
      * @return size of the data
      */
-
     public int getSize() {
       return size;
     }
@@ -176,6 +204,7 @@ public final class UploadContentProviders {
      * Why? The AWS SDK implementations do this, so there
      * is an implication that it is needed to avoid keeping streams
      * open on retries.
+     * @return the current stream, or null if none is open.
      */
     protected T getCurrentStream() {
       return currentStream;
@@ -223,15 +252,23 @@ public final class UploadContentProviders {
      * @param offset offset in file.
      * @throws IllegalArgumentException if the offset is negative.
      */
-    public FileWithOffsetContentProvider(final File file, final long offset, final int size) {
+    private FileWithOffsetContentProvider(final File file,
+        final long offset,
+        final int size) {
+
       super(size);
       this.file = requireNonNull(file);
       checkArgument(offset >= 0, "Offset is negative: %s", offset);
       this.offset = offset;
     }
 
+    /**
+     * Create a new stream.
+     * @return a stream at the start of the offset in the file
+     * @throws UncheckedIOException on IO failure.
+     */
     @Override
-    protected BufferedInputStream createNewStream() {
+    protected BufferedInputStream createNewStream() throws UncheckedIOException {
       // create the stream, seek to the offset.
       final FileInputStream fis = uncheckIOExceptions(() -> {
         final FileInputStream f = new FileInputStream(file);
@@ -265,11 +302,6 @@ public final class UploadContentProviders {
     private final ByteBuffer blockBuffer;
 
     /**
-     * Size of the data in the buffer.
-     */
-    private final int dataSize;
-
-    /**
      * Constructor.
      * @param blockBuffer buffer to read.
      * @param size size of the data.
@@ -279,25 +311,24 @@ public final class UploadContentProviders {
     private ByteBufferContentProvider(final ByteBuffer blockBuffer, int size) {
       super(size);
       this.blockBuffer = blockBuffer;
-      dataSize = blockBuffer.capacity() - blockBuffer.remaining();
     }
 
     @Override
     protected ByteBufferInputStream createNewStream() {
-      return new ByteBufferInputStream(dataSize, blockBuffer);
+      return new ByteBufferInputStream(getSize(), blockBuffer);
     }
 
     @Override
     public String toString() {
       return "ByteBufferContentProvider{" +
           "blockBuffer=" + blockBuffer +
-          ", dataSize=" + dataSize +
           "} " + super.toString();
     }
   }
 
   /**
    * Simple byte array content provider.
+   * <p>
    * The array is not copied; if it is changed during the write the outcome
    * of the upload is undefined.
    */
@@ -325,11 +356,19 @@ public final class UploadContentProviders {
       super(size);
       this.bytes = bytes;
       this.offset = offset;
+      checkArgument(offset >= 0, "Offset is negative: %s", offset);
+      final int length = bytes.length;
+      checkArgument((offset + size) <= length,
+          "Data to read [%d-%d] is past end of array %s",
+          offset,
+          offset + size, length);
+
+
     }
 
     @Override
     protected ByteArrayInputStream createNewStream() {
-      return new ByteArrayInputStream(this.bytes, offset, getSize());
+      return new ByteArrayInputStream(bytes, offset, getSize());
     }
 
     @Override

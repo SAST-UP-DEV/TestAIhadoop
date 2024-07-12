@@ -19,30 +19,30 @@
 package org.apache.hadoop.fs.s3a;
 
 import java.io.BufferedOutputStream;
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
-import java.io.EOFException;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.hadoop.fs.store.ByteBufferInputStream;
+import org.apache.hadoop.fs.s3a.impl.UploadContentProviders;
 import org.apache.hadoop.fs.store.DataBlocks;
 import org.apache.hadoop.util.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.hadoop.fs.FSExceptionMessages;
 import org.apache.hadoop.fs.s3a.statistics.BlockOutputStreamStatistics;
 import org.apache.hadoop.util.DirectBufferPool;
 
+import static java.util.Objects.requireNonNull;
 import static org.apache.hadoop.fs.s3a.S3ADataBlocks.DataBlock.DestState.*;
+import static org.apache.hadoop.fs.s3a.impl.UploadContentProviders.byteArrayContentProvider;
+import static org.apache.hadoop.fs.s3a.impl.UploadContentProviders.byteBufferContentProvider;
+import static org.apache.hadoop.fs.s3a.impl.UploadContentProviders.fileContentProvider;
 import static org.apache.hadoop.io.IOUtils.cleanupWithLogger;
 
 /**
@@ -95,12 +95,26 @@ public final class S3ADataBlocks {
 
   /**
    * The output information for an upload.
-   * It can be one of a file or an input stream.
-   * When closed, any stream is closed. Any source file is untouched.
+   * <p>
+   * The data is accessed via the content provider; other constructors
+   * create the appropriate content provider for the data.
+   * <p>
+   * When {@link #close()} is called, the content provider is itself closed.
    */
   public static final class BlockUploadData implements Closeable {
-    private final File file;
-    private final InputStream uploadStream;
+    private final UploadContentProviders.BaseContentProvider<?> contentProvider;
+
+    public BlockUploadData(final UploadContentProviders.BaseContentProvider<?>  contentProvider) {
+      this.contentProvider = requireNonNull(contentProvider);
+    }
+
+    /**
+     * The content provider.
+     * @return the content provider
+     */
+    public UploadContentProviders.BaseContentProvider<?> getContentProvider() {
+      return contentProvider;
+    }
 
     /**
      * File constructor; input stream will be null.
@@ -108,43 +122,39 @@ public final class S3ADataBlocks {
      */
     public BlockUploadData(File file) {
       Preconditions.checkArgument(file.exists(), "No file: " + file);
-      this.file = file;
-      this.uploadStream = null;
+      this.contentProvider = fileContentProvider(file, 0, (int)file.length());
     }
 
     /**
-     * Stream constructor, file field will be null.
-     * @param uploadStream stream to upload
+     * Byte array constructor, with support for
+     * uploading just a slice of the array.
+     *
+     * @param bytes buffer to read.
+     * @param offset offset in buffer.
+     * @param size size of the data.
+     * @throws IllegalArgumentException if the arguments are invalid.
+     * @throws NullPointerException if the buffer is null.
      */
-    public BlockUploadData(InputStream uploadStream) {
-      Preconditions.checkNotNull(uploadStream, "rawUploadStream");
-      this.uploadStream = uploadStream;
-      this.file = null;
+    public BlockUploadData(byte[] bytes, int offset, int size) {
+      this.contentProvider = byteArrayContentProvider(bytes, offset, size);
     }
 
     /**
-     * Predicate: does this instance contain a file reference.
-     * @return true if there is a file.
+     * Byte array constructor to upload all of the array.
+     * @param bytes buffer to read.
+     * @throws IllegalArgumentException if the arguments are invalid.
+     * @throws NullPointerException if the buffer is null.
      */
-    boolean hasFile() {
-      return file != null;
+    public BlockUploadData(byte[] bytes) {
+      this.contentProvider = byteArrayContentProvider(bytes);
     }
 
     /**
-     * Get the file, if there is one.
-     * @return the file for uploading, or null.
+     * Size as declared by the content provider.
+     * @return size of the data
      */
-    File getFile() {
-      return file;
-    }
-
-    /**
-     * Get the raw upload stream, if the object was
-     * created with one.
-     * @return the upload stream or null.
-     */
-    InputStream getUploadStream() {
-      return uploadStream;
+    int getSize() {
+      return contentProvider.getSize();
     }
 
     /**
@@ -153,7 +163,7 @@ public final class S3ADataBlocks {
      */
     @Override
     public void close() throws IOException {
-      cleanupWithLogger(LOG, uploadStream);
+      cleanupWithLogger(LOG, contentProvider);
     }
   }
 
@@ -398,6 +408,11 @@ public final class S3ADataBlocks {
 
   }
 
+  /**
+   * Subclass of JVM {@link ByteArrayOutputStream} which makes the buffer
+   * accessible; the base class {@code toByteArray()} method creates a copy
+   * of the data first, which we do not want.
+   */
   static class S3AByteArrayOutputStream extends ByteArrayOutputStream {
 
     S3AByteArrayOutputStream(int size) {
@@ -405,16 +420,14 @@ public final class S3ADataBlocks {
     }
 
     /**
-     * InputStream backed by the internal byte array.
-     *
-     * @return
+     * Get the buffer.
+     * This is not a copy.
+     * @return the buffer.
      */
-    ByteArrayInputStream getInputStream() {
-      ByteArrayInputStream bin = new ByteArrayInputStream(this.buf, 0, count);
-      this.reset();
-      this.buf = null;
-      return bin;
+    public byte[] getBuffer() {
+      return buf;
     }
+
   }
 
   /**
@@ -456,9 +469,9 @@ public final class S3ADataBlocks {
     BlockUploadData startUpload() throws IOException {
       super.startUpload();
       dataSize = buffer.size();
-      ByteArrayInputStream bufferData = buffer.getInputStream();
+      final byte[] bytes = buffer.getBuffer();
       buffer = null;
-      return new BlockUploadData(bufferData);
+      return new BlockUploadData(byteArrayContentProvider(bytes, 0, dataSize));
     }
 
     @Override
@@ -587,11 +600,7 @@ public final class S3ADataBlocks {
       BlockUploadData startUpload() throws IOException {
         super.startUpload();
         dataSize = bufferCapacityUsed();
-        // set the buffer up from reading from the beginning
-        blockBuffer.limit(blockBuffer.position());
-        blockBuffer.position(0);
-        return new BlockUploadData(
-            new ByteBufferInputStream(dataSize, blockBuffer));
+        return new BlockUploadData(byteBufferContentProvider(blockBuffer, dataSize));
       }
 
       @Override

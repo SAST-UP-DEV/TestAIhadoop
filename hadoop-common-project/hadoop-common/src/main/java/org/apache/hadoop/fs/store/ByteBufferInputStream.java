@@ -171,14 +171,10 @@ public final class ByteBufferInputStream extends InputStream {
 
   @Override
   public String toString() {
-    final StringBuilder sb = new StringBuilder(
-        "ByteBufferInputStream{");
-    sb.append("size=").append(size);
-    ByteBuffer buf = this.byteBuffer;
-    if (buf != null) {
-      sb.append(", available=").append(buf.remaining());
-    }
-    sb.append('}');
-    return sb.toString();
+    return "ByteBufferInputStream{" +
+        "size=" + size +
+        ", byteBuffer=" + byteBuffer +
+        ((byteBuffer != null) ? ", available=" + byteBuffer.remaining() : "") +
+        "} " + super.toString();
   }
 }
