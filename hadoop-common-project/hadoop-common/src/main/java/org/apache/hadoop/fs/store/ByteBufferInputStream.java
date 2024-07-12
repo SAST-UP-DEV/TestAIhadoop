@@ -66,6 +66,14 @@ public final class ByteBufferInputStream extends InputStream {
   }
 
   /**
+   * Is the stream open?
+   * @return true if the stream has not been closed.
+   */
+  public synchronized boolean isOpen() {
+    return byteBuffer != null;
+  }
+
+  /**
    * Verify that the stream is open.
    * @throws IOException if the stream is closed
    */
@@ -73,6 +81,15 @@ public final class ByteBufferInputStream extends InputStream {
     if (byteBuffer == null) {
       throw new IOException(FSExceptionMessages.STREAM_IS_CLOSED);
     }
+  }
+
+  /**
+   * Check the open state.
+   * @throws IllegalStateException if the stream is closed.
+   */
+  private void checkOpenState() {
+    Preconditions.checkState(isOpen(),
+        FSExceptionMessages.STREAM_IS_CLOSED);
   }
 
   public synchronized int read() throws IOException {
@@ -99,8 +116,7 @@ public final class ByteBufferInputStream extends InputStream {
 
   @Override
   public synchronized int available() {
-    Preconditions.checkState(byteBuffer != null,
-        FSExceptionMessages.STREAM_IS_CLOSED);
+    checkOpenState();
     return byteBuffer.remaining();
   }
 
@@ -109,6 +125,7 @@ public final class ByteBufferInputStream extends InputStream {
    * @return the buffer position
    */
   public synchronized int position() {
+    checkOpenState();
     return byteBuffer.position();
   }
 
@@ -117,18 +134,21 @@ public final class ByteBufferInputStream extends InputStream {
    * @return true if there is data remaining in the buffer.
    */
   public synchronized boolean hasRemaining() {
+    checkOpenState();
     return byteBuffer.hasRemaining();
   }
 
   @Override
   public synchronized void mark(int readlimit) {
     LOG.debug("mark at {}", position());
+    checkOpenState();
     byteBuffer.mark();
   }
 
   @Override
   public synchronized void reset() throws IOException {
     LOG.debug("reset");
+    checkOpenState();
     byteBuffer.reset();
   }
 

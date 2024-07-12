@@ -947,9 +947,11 @@ class S3ABlockOutputStream extends OutputStream implements
       try {
         return Futures.allAsList(partETagsFutures).get();
       } catch (InterruptedException ie) {
-        // interruptions can happen if a task is aborted.
+        // interruptions are raided if a task is aborted by spark.
         LOG.warn("Interrupted while waiting for uploads to {} to complete", key, ie);
+        // abort the upload
         abort();
+        // then regenerate a new InterruptedIOException
         throw (IOException) new InterruptedIOException(ie.toString()).initCause(ie);
       } catch (ExecutionException ee) {
         //there is no way of recovering so abort

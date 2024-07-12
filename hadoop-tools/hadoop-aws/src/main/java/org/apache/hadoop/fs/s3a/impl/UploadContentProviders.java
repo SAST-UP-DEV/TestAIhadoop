@@ -161,7 +161,8 @@ public final class UploadContentProviders {
 
     /**
      * Note that a stream was created.
-     * Logs if this is a subsequent event as it implies a failure of the first attempt.
+     * <p>
+     *   Logs if this is a subsequent event as it implies a failure of the first attempt.
      * @return the new stream
      */
     @Override
@@ -171,7 +172,7 @@ public final class UploadContentProviders {
       if (streamCreationCount > 1) {
         LOG.info("Stream created more than once: {}", this);
       }
-      return createNewStream();
+      return setCurrentStream(createNewStream());
     }
 
     /**
@@ -182,9 +183,9 @@ public final class UploadContentProviders {
 
     /**
      * How many times has a stream been created?
-     * @return
+     * @return stream creation count
      */
-    int getStreamCreationCount() {
+    public int getStreamCreationCount() {
       return streamCreationCount;
     }
 
@@ -302,6 +303,11 @@ public final class UploadContentProviders {
     private final ByteBuffer blockBuffer;
 
     /**
+     * The position in the buffer at the time the provider was created.
+     */
+    private final int initialPosition;
+
+    /**
      * Constructor.
      * @param blockBuffer buffer to read.
      * @param size size of the data.
@@ -311,10 +317,14 @@ public final class UploadContentProviders {
     private ByteBufferContentProvider(final ByteBuffer blockBuffer, int size) {
       super(size);
       this.blockBuffer = blockBuffer;
+      this.initialPosition = blockBuffer.position();
     }
 
     @Override
     protected ByteBufferInputStream createNewStream() {
+      // set the buffer up from reading from the beginning
+      blockBuffer.limit(initialPosition);
+      blockBuffer.position(0);
       return new ByteBufferInputStream(getSize(), blockBuffer);
     }
 
@@ -322,6 +332,7 @@ public final class UploadContentProviders {
     public String toString() {
       return "ByteBufferContentProvider{" +
           "blockBuffer=" + blockBuffer +
+          ", initialPosition=" + initialPosition +
           "} " + super.toString();
     }
   }
@@ -374,7 +385,7 @@ public final class UploadContentProviders {
     @Override
     public String toString() {
       return "ByteArrayContentProvider{" +
-          "buf=" + Arrays.toString(bytes) +
+          "buffer with length=" + bytes.length +
           ", offset=" + offset +
           "} " + super.toString();
     }
