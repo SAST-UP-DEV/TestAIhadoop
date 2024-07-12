@@ -24,7 +24,9 @@ import java.util.Collection;
 import java.util.Optional;
 
 import org.assertj.core.api.Assertions;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
@@ -54,6 +56,9 @@ public class TestDataBlocks extends HadoopTestBase {
     });
   }
 
+  @Rule
+  public final TemporaryFolder tempDir = new TemporaryFolder();
+
   /**
    * Buffer type.
    */
@@ -69,8 +74,10 @@ public class TestDataBlocks extends HadoopTestBase {
    */
   private S3ADataBlocks.BlockFactory createFactory() {
     switch (bufferType) {
+    // this one passed in a file allocation function
     case FAST_UPLOAD_BUFFER_DISK:
-      return new S3ADataBlocks.DiskBlockFactory(null);
+      return new S3ADataBlocks.DiskBlockFactory((i, l) ->
+          tempDir.newFile("file" + i));
     case FAST_UPLOAD_BUFFER_ARRAY:
       return new S3ADataBlocks.ArrayBlockFactory(null);
     case FAST_UPLOAD_BYTEBUFFER:
@@ -174,6 +181,14 @@ public class TestDataBlocks extends HadoopTestBase {
 
       // now ask the content provider for another content stream.
       final InputStream stream2 = cp.newStream();
+      assertStreamCreationCount(cp, 2);
+
+      // this must close the old stream
+      bbStream.ifPresent(bb -> {
+        Assertions.assertThat(bb.isOpen())
+            .describedAs("stream %s is open", bb)
+            .isFalse();
+      });
 
       // do a read(byte[]) of everything
       byte[] readBuffer = new byte[bufferLen];
@@ -183,15 +198,6 @@ public class TestDataBlocks extends HadoopTestBase {
       Assertions.assertThat(readBuffer)
           .describedAs("data read into buffer")
           .isEqualTo(buffer);
-
-      // this must close the old stream
-      bbStream.ifPresent(bb -> {
-        Assertions.assertThat(bb.isOpen())
-            .describedAs("stream %s is open", bb)
-            .isFalse();
-      });
-
-      assertStreamCreationCount(cp, 2);
 
       // when the block is closed, the buffer must be returned
       // to the pool.
@@ -203,7 +209,8 @@ public class TestDataBlocks extends HadoopTestBase {
 
   }
 
-  private static void assertStreamCreationCount(final UploadContentProviders.BaseContentProvider<?> cp,
+  private static void assertStreamCreationCount(
+      final UploadContentProviders.BaseContentProvider<?> cp,
       final int count) {
     Assertions.assertThat(cp.getStreamCreationCount())
         .describedAs("stream creation count of %s", cp)

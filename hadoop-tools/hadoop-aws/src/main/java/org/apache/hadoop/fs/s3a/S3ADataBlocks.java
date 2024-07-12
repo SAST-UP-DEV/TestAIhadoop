@@ -29,6 +29,7 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.hadoop.classification.VisibleForTesting;
 import org.apache.hadoop.fs.s3a.impl.UploadContentProviders;
 import org.apache.hadoop.fs.store.DataBlocks;
 import org.apache.hadoop.util.Preconditions;
@@ -37,6 +38,8 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.hadoop.fs.s3a.statistics.BlockOutputStreamStatistics;
 import org.apache.hadoop.util.DirectBufferPool;
+import org.apache.hadoop.util.functional.BiFunctionRaisingIOE;
+import org.apache.hadoop.util.functional.CallableRaisingIOE;
 
 import static java.util.Objects.requireNonNull;
 import static org.apache.hadoop.fs.s3a.S3ADataBlocks.DataBlock.DestState.*;
@@ -659,8 +662,28 @@ public final class S3ADataBlocks {
    */
   static class DiskBlockFactory extends BlockFactory {
 
+    /**
+     * Function to create a temp file.
+     */
+    private final BiFunctionRaisingIOE<Long, Long, File> tempFileFn;
+
     DiskBlockFactory(S3AFileSystem owner) {
       super(owner);
+      tempFileFn = (index, limit) ->
+          owner.createTmpFileForWrite(
+              String.format("s3ablock-%04d-", index),
+              limit,
+              getOwner().getConf());
+    }
+
+    /**
+     * Constructor for testing.
+     * @param tempFileFn function to create a temp file
+     */
+    @VisibleForTesting
+    DiskBlockFactory(BiFunctionRaisingIOE<Long, Long, File> tempFileFn) {
+      super(null);
+      this.tempFileFn = requireNonNull(tempFileFn);
     }
 
     /**
@@ -679,9 +702,7 @@ public final class S3ADataBlocks {
         throws IOException {
       Preconditions.checkArgument(limit != 0,
           "Invalid block size: %d", limit);
-      File destFile = getOwner()
-          .createTmpFileForWrite(String.format("s3ablock-%04d-", index),
-              limit, getOwner().getConf());
+      File destFile = tempFileFn.apply(index, limit);
       return new DiskBlock(destFile, limit, index, statistics);
     }
   }
@@ -705,7 +726,7 @@ public final class S3ADataBlocks {
         throws FileNotFoundException {
       super(index, statistics);
       this.limit = limit;
-      this.bufferFile = bufferFile;
+      this.bufferFile = requireNonNull(bufferFile);
       blockAllocated();
       out = new BufferedOutputStream(new FileOutputStream(bufferFile));
     }
