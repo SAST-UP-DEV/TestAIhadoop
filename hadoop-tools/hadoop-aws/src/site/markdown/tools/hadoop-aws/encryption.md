@@ -682,9 +682,9 @@ clients where S3-CSE has not been enabled.
 
 ### Compatibility
 
-- V1 and V2 client suppports reading unencrypted s3 object where as V3 client does not support. Inorder to read s3 objects in a directory with mix of encrypted and unencrypted objects when CSE is enabled set `fs.s3a.encryption.cse.read.unencrypted.objects=true`
-- Unlike V2 and V3 client which always pads 16 bytes, V1 client pads extra bytes to the next multiple of 16. For example if unencrypted object size is 12bytes, V1 client pads extra 4bytes to make it multiple of 16. So inorder to read objects encrypted by V1 client, set `fs.s3a.encryption.cse.object.size.ranged.get.enabled=true`
-- V1 client supports storing encryption metadata in instruction file. In order to skip those instruction file set `fs.s3a.encryption.cse.skip.instruction.file=true`
+- The V1 and V2 clients support reading unencrypted S3 objects, whereas the V3 client does not. In order to read S3 objects in a directory with a mix of encrypted and unencrypted objects, when CSE is enabled, set `fs.s3a.encryption.cse.read.unencrypted.objects=true`
+- Unlike the V2 and V3 clients which always pads 16 bytes, V1 client pads extra bytes to the next multiple of 16. For example if unencrypted object size is 12bytes, V1 client pads extra 4bytes to make it multiple of 16. So inorder to read objects encrypted by V1 client, set `fs.s3a.encryption.cse.object.size.ranged.get.enabled=true`
+- The V1 client supports storing encryption metadata in instruction file. In order to skip those instruction file set `fs.s3a.encryption.cse.skip.instruction.file=true`
 
 ### Limitations
 

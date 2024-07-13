@@ -61,6 +61,9 @@ public class ClientManagerImpl implements ClientManager {
    */
   private final S3ClientFactory clientFactory;
 
+  /**
+   * Client factory to invoke for unencrypted client.
+   */
   private final S3ClientFactory unencryptedClientFactory;
 
   /**
@@ -86,6 +89,10 @@ public class ClientManagerImpl implements ClientManager {
   /** Async client is used for transfer manager. */
   private final LazyAutoCloseableReference<S3AsyncClient> s3AsyncClient;
 
+  /**
+   * Unencrypted S3 client.
+   * This is used for unencrypted operations when CSE is enabled.
+   */
   private final LazyAutoCloseableReference<S3Client> unencryptedS3Client;
 
   /** Transfer manager. */
@@ -136,6 +143,10 @@ public class ClientManagerImpl implements ClientManager {
         () -> clientFactory.createS3AsyncClient(getUri(), clientCreationParameters));
   }
 
+  /**
+   * Create the function to create the unencrypted S3 client.
+   * @return a callable which will create the client.
+   */
   private CallableRaisingIOE<S3Client> createUnencryptedS3Client() {
     return trackDurationOfOperation(
         durationTrackerFactory,
@@ -168,6 +179,12 @@ public class ClientManagerImpl implements ClientManager {
     return s3AsyncClient.eval();
   }
 
+  /**
+   * Get or create an unencrypted S3 client.
+   * This is used for unencrypted operations when CSE is enabled.
+   * @return unencrypted S3 client
+   * @throws IOException on any failure
+   */
   @Override
   public synchronized S3Client getOrCreateUnencryptedS3Client() throws IOException {
     checkNotClosed();

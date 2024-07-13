@@ -16,12 +16,18 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.fs.s3a.impl;
+package org.apache.hadoop.fs.s3a.impl.encryption;
 
-import io.netty.util.internal.StringUtil;
+import java.io.IOException;
+import java.io.InputStream;
+
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.s3a.S3AEncryptionMethods;
+import org.apache.hadoop.fs.s3a.api.RequestFactory;
+import org.apache.hadoop.fs.s3a.impl.InternalConstants;
+import org.apache.hadoop.util.Preconditions;
 
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
@@ -29,11 +35,12 @@ import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 
-import java.io.IOException;
-import java.io.InputStream;
-
+import static org.apache.hadoop.fs.s3a.Constants.S3_ENCRYPTION_CSE_CUSTOM_KEYRING_CLASS_NAME;
 import static org.apache.hadoop.fs.s3a.Constants.S3_ENCRYPTION_CSE_INSTRUCTION_FILE_SUFFIX;
+import static org.apache.hadoop.fs.s3a.S3AEncryptionMethods.CSE_CUSTOM;
+import static org.apache.hadoop.fs.s3a.S3AEncryptionMethods.CSE_KMS;
 import static org.apache.hadoop.fs.s3a.S3AUtils.formatRange;
+import static org.apache.hadoop.fs.s3a.S3AUtils.getS3EncryptionKey;
 import static org.apache.hadoop.fs.s3a.impl.AWSHeaders.CRYPTO_CEK_ALGORITHM;
 import static org.apache.hadoop.fs.s3a.impl.AWSHeaders.UNENCRYPTED_CONTENT_LENGTH;
 import static org.apache.hadoop.fs.s3a.impl.InternalConstants.CSE_PADDING_LENGTH;
@@ -41,7 +48,7 @@ import static org.apache.hadoop.fs.s3a.impl.InternalConstants.CSE_PADDING_LENGTH
 /**
  * S3 client side encryption (CSE) utility class.
  */
-@InterfaceAudience.Private
+@InterfaceAudience.Public
 @InterfaceStability.Evolving
 public final class CSEUtils {
 
@@ -49,21 +56,14 @@ public final class CSEUtils {
   }
 
   /**
-   * Checks if the file suffix ends with
+   * Checks if the file suffix ends CSE file suffix.
    * {@link org.apache.hadoop.fs.s3a.Constants#S3_ENCRYPTION_CSE_INSTRUCTION_FILE_SUFFIX}
    * when the config
-   * {@link org.apache.hadoop.fs.s3a.Constants#S3_ENCRYPTION_CSE_SKIP_INSTRUCTION_FILE_DEFAULT}
-   * is enabled and CSE is used.
-   * @param skipCSEInstructionFile whether to skip checking for the filename suffix
    * @param key file name
-   * @return true if cse is disabled or if skipping of instruction file is disabled or file name
-   * does not end with defined suffix
+   * @return true if file name ends with CSE instruction file suffix
    */
-  public static boolean isCSEInstructionFile(boolean skipCSEInstructionFile, String key) {
-    if (!skipCSEInstructionFile) {
-      return true;
-    }
-    return !key.endsWith(S3_ENCRYPTION_CSE_INSTRUCTION_FILE_SUFFIX);
+  public static boolean isCSEInstructionFile(String key) {
+    return key.endsWith(S3_ENCRYPTION_CSE_INSTRUCTION_FILE_SUFFIX);
   }
 
   /**
@@ -72,8 +72,8 @@ public final class CSEUtils {
    * @return true if encryption method is CSE-KMS or CSE-CUSTOM
    */
   public static boolean isCSEKmsOrCustom(String encryptionMethod) {
-    return S3AEncryptionMethods.CSE_KMS.getMethod().equals(encryptionMethod) ||
-        S3AEncryptionMethods.CSE_CUSTOM.getMethod().equals(encryptionMethod);
+    return CSE_KMS.getMethod().equals(encryptionMethod) ||
+        CSE_CUSTOM.getMethod().equals(encryptionMethod);
   }
 
   /**
@@ -82,26 +82,21 @@ public final class CSEUtils {
    * 2. if instruction file is present
    *
    * @param s3Client S3 client
-   * @param bucket   bucket name of the s3 object
+   * @param factory   S3 request factory
    * @param key      key value of the s3 object
    * @return true if S3 object is encrypted
    */
-  public static boolean isObjectEncrypted(S3Client s3Client, String bucket, String key) {
-    HeadObjectRequest request = HeadObjectRequest.builder()
-        .bucket(bucket)
-        .key(key)
-        .build();
-    HeadObjectResponse headObjectResponse = s3Client.headObject(request);
+  public static boolean isObjectEncrypted(S3Client s3Client, RequestFactory factory, String key) {
+    HeadObjectRequest.Builder requestBuilder = factory.newHeadObjectRequestBuilder(key);
+    HeadObjectResponse headObjectResponse = s3Client.headObject(requestBuilder.build());
     if (headObjectResponse.hasMetadata() &&
         headObjectResponse.metadata().get(CRYPTO_CEK_ALGORITHM) != null) {
       return true;
     }
-    HeadObjectRequest instructionFileCheckRequest = HeadObjectRequest.builder()
-        .bucket(bucket)
-        .key(key + S3_ENCRYPTION_CSE_INSTRUCTION_FILE_SUFFIX)
-        .build();
+    HeadObjectRequest.Builder instructionFileRequestBuilder =
+        factory.newHeadObjectRequestBuilder(key + S3_ENCRYPTION_CSE_INSTRUCTION_FILE_SUFFIX);
     try {
-      s3Client.headObject(instructionFileCheckRequest);
+      s3Client.headObject(instructionFileRequestBuilder.build());
       return true;
     } catch (NoSuchKeyException e) {
       // Ignore. This indicates no instruction file is present
@@ -117,6 +112,7 @@ public final class CSEUtils {
    * @param s3Client           S3 client
    * @param bucket             bucket name of the s3 object
    * @param key                key value of the s3 object
+   * @param factory            S3 request factory
    * @param contentLength      S3 object length
    * @param headObjectResponse response from headObject call
    * @param cseRangedGetEnabled is ranged get enabled
@@ -127,6 +123,7 @@ public final class CSEUtils {
   public static long getUnencryptedObjectLength(S3Client s3Client,
       String bucket,
       String key,
+      RequestFactory factory,
       long contentLength,
       HeadObjectResponse headObjectResponse,
       boolean cseRangedGetEnabled,
@@ -134,7 +131,7 @@ public final class CSEUtils {
 
     if (cseReadUnencryptedObjects) {
       // if object is unencrypted, return the actual size
-      if (!isObjectEncrypted(s3Client, bucket, key)) {
+      if (!isObjectEncrypted(s3Client, factory, key)) {
         return contentLength;
       }
     }
@@ -142,7 +139,8 @@ public final class CSEUtils {
     // check if unencrypted content length metadata is present or not.
     if (headObjectResponse != null) {
       String plaintextLength = headObjectResponse.metadata().get(UNENCRYPTED_CONTENT_LENGTH);
-      if (headObjectResponse.hasMetadata() && !StringUtil.isNullOrEmpty(plaintextLength)) {
+      if (headObjectResponse.hasMetadata() && plaintextLength !=null &&
+          !plaintextLength.isEmpty()) {
         return Long.parseLong(plaintextLength);
       }
     }
@@ -166,6 +164,8 @@ public final class CSEUtils {
             i++;
           }
           return minPlaintextLength + i;
+        } catch (Exception e) {
+          throw new IOException("Failed to compute unencrypted length", e);
         }
       }
       return contentLength;
@@ -176,5 +176,39 @@ public final class CSEUtils {
       return unpaddedLength;
     }
     return contentLength;
+  }
+
+  /**
+   * Configure CSE params based on encryption algorithm.
+   * @param conf Configuration
+   * @param bucket bucket name
+   * @param algorithm encryption algorithm
+   * @return CSEMaterials
+   * @throws IOException IO failures
+   */
+  public static CSEMaterials configureCSEparams(Configuration conf, String bucket,
+      S3AEncryptionMethods algorithm) throws IOException {
+    switch (algorithm) {
+    case CSE_KMS:
+      String kmsKeyId = getS3EncryptionKey(bucket, conf, true);
+      Preconditions.checkArgument(kmsKeyId != null && !kmsKeyId.isEmpty(),
+          "KMS keyId cannot be null or empty");
+      return new CSEMaterials()
+          .withCSEKeyType(CSEMaterials.CSEKeyType.KMS)
+          .withConf(conf)
+          .withKmsKeyId(kmsKeyId);
+    case CSE_CUSTOM:
+      String customCryptoClassName = conf.getTrimmed(S3_ENCRYPTION_CSE_CUSTOM_KEYRING_CLASS_NAME);
+      Preconditions.checkArgument(customCryptoClassName != null &&
+              !customCryptoClassName.isEmpty(),
+          "CSE custom cryptographic class name cannot be null or empty");
+      return new CSEMaterials()
+          .withCSEKeyType(CSEMaterials.CSEKeyType.CUSTOM)
+          .withConf(conf)
+          .withCustomCryptographicClassName(customCryptoClassName);
+    default:
+      throw new IllegalArgumentException("Invalid client side encryption algorithm."
+          + " Only CSE-KMS and CSE-CUSTOM are supported");
+    }
   }
 }

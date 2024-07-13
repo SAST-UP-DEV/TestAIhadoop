@@ -37,7 +37,6 @@ import javax.annotation.Nullable;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.model.CompletedPart;
 import software.amazon.awssdk.services.s3.model.MultipartUpload;
-import software.amazon.awssdk.services.s3.model.SdkPartType;
 import software.amazon.awssdk.services.s3.model.UploadPartRequest;
 import software.amazon.awssdk.services.s3.model.UploadPartResponse;
 import org.slf4j.Logger;
@@ -585,10 +584,8 @@ public class CommitOperations extends AbstractStoreOperation
               destKey,
               uploadId,
               partNumber,
+              partNumber == numParts,
               size);
-          if (partNumber == numParts) {
-            partBuilder.sdkPartType(SdkPartType.LAST);
-          }
           // Read from the file input stream at current position.
           RequestBody body = RequestBody.fromInputStream(fileStream, size);
           UploadPartResponse response = writeOperations.uploadPart(partBuilder.build(),

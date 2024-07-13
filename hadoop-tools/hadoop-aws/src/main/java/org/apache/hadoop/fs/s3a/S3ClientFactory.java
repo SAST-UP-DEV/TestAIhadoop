@@ -26,7 +26,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 
-import org.apache.hadoop.fs.s3a.impl.CSEMaterials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.core.interceptor.ExecutionInterceptor;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
@@ -35,6 +34,7 @@ import software.amazon.awssdk.transfer.s3.S3TransferManager;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
+import org.apache.hadoop.fs.s3a.impl.encryption.CSEMaterials;
 import org.apache.hadoop.fs.s3a.statistics.StatisticsFromAwsSdk;
 
 import static org.apache.hadoop.fs.s3a.Constants.DEFAULT_ENDPOINT;
@@ -119,6 +119,10 @@ public interface S3ClientFactory {
      */
     private StatisticsFromAwsSdk metrics;
 
+    /**
+     * Is CSE enabled?
+     * The default value is {@value}.
+     */
     private Boolean isCSEEnabled = false;
 
     /**

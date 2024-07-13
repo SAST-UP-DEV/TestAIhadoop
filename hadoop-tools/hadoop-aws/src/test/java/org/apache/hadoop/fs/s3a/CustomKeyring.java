@@ -47,13 +47,14 @@ public class CustomKeyring implements Keyring {
 
   public CustomKeyring(Configuration conf) throws IOException {
     this.conf = conf;
+    String bucket = S3ATestUtils.getFsName(conf);
     kmsClient = KmsClient.builder().region(Region.of(conf.get(AWS_REGION, AWS_S3_DEFAULT_REGION)))
         .credentialsProvider(new TemporaryAWSCredentialsProvider(
-            new Path(conf.get("test.fs.s3a.name")).toUri(), conf))
+            new Path(bucket).toUri(), conf))
         .build();
     kmsKeyring = KmsKeyring.builder()
         .kmsClient(kmsClient)
-        .wrappingKeyId(conf.get(Constants.S3_ENCRYPTION_KEY)).build();
+        .wrappingKeyId(S3AUtils.getS3EncryptionKey(bucket, conf)).build();
   }
 
   @Override

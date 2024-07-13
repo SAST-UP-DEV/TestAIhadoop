@@ -21,7 +21,12 @@ package org.apache.hadoop.fs.s3a;
 import java.io.IOException;
 import java.net.URI;
 
-import org.apache.hadoop.thirdparty.com.google.common.base.Strings;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.s3a.impl.encryption.CSEMaterials;
+import org.apache.hadoop.util.Preconditions;
+import org.apache.hadoop.util.ReflectionUtils;
+import org.apache.hadoop.util.functional.LazyAtomicReference;
+
 import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.encryption.s3.S3AsyncEncryptionClient;
@@ -30,12 +35,11 @@ import software.amazon.encryption.s3.materials.CryptographicMaterialsManager;
 import software.amazon.encryption.s3.materials.DefaultCryptoMaterialsManager;
 import software.amazon.encryption.s3.materials.Keyring;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.s3a.impl.CSEMaterials;
-import org.apache.hadoop.util.ReflectionUtils;
-
 import static org.apache.hadoop.fs.s3a.impl.InstantiationIOException.unavailable;
 
+/**
+ * Factory class to create encrypted s3 client and encrypted async s3 client.
+ */
 public class EncryptionS3ClientFactory extends DefaultS3ClientFactory {
 
   private static final String ENCRYPTION_CLIENT_CLASSNAME =
@@ -44,7 +48,11 @@ public class EncryptionS3ClientFactory extends DefaultS3ClientFactory {
   /**
    * Encryption client availability.
    */
-  private static final boolean ENCRYPTION_CLIENT_FOUND = checkForEncryptionClient();
+  private static final LazyAtomicReference<Boolean> ENCRYPTION_CLIENT_AVAILABLE =
+      LazyAtomicReference.lazyAtomicReferenceFromSupplier(
+          EncryptionS3ClientFactory::checkForEncryptionClient
+      );
+
 
   /**
    * S3Client to be wrapped by encryption client.
@@ -73,11 +81,13 @@ public class EncryptionS3ClientFactory extends DefaultS3ClientFactory {
    * @return true if it was found in the classloader
    */
   private static synchronized boolean isEncryptionClientAvailable() {
-    return ENCRYPTION_CLIENT_FOUND;
+    return ENCRYPTION_CLIENT_AVAILABLE.get();
   }
 
   /**
-   * Create encrypted s3 client.
+   * Creates both synchronous and asynchronous encrypted s3 clients.
+   * Synchronous client is wrapped by encryption client first and then
+   * Asynchronous client is wrapped by encryption client.
    * @param uri S3A file system URI
    * @param parameters parameter object
    * @return encrypted s3 client
@@ -114,7 +124,16 @@ public class EncryptionS3ClientFactory extends DefaultS3ClientFactory {
     return createS3AsyncEncryptionClient(parameters.getClientSideEncryptionMaterials());
   }
 
+  /**
+   * Create encrypted s3 client.
+   * @param cseMaterials
+   * @return encrypted s3 client
+   */
   private S3Client createS3EncryptionClient(final CSEMaterials cseMaterials) {
+    Preconditions.checkArgument(s3AsyncClient !=null,
+        "S3 async client not initialized");
+    Preconditions.checkArgument(s3Client !=null,
+        "S3 client not initialized");
     S3EncryptionClient.Builder s3EncryptionClientBuilder =
         S3EncryptionClient.builder().wrappedAsyncClient(s3AsyncClient).wrappedClient(s3Client)
             // this is required for doing S3 ranged GET calls
@@ -141,7 +160,14 @@ public class EncryptionS3ClientFactory extends DefaultS3ClientFactory {
     return s3EncryptionClientBuilder.build();
   }
 
+  /**
+   * Create async encrypted s3 client.
+   * @param cseMaterials
+   * @return encrypted async s3 client
+   */
   private S3AsyncClient createS3AsyncEncryptionClient(final CSEMaterials cseMaterials) {
+    Preconditions.checkArgument(s3AsyncClient !=null,
+        "S3 async client not initialized");
     S3AsyncEncryptionClient.Builder s3EncryptionAsyncClientBuilder =
         S3AsyncEncryptionClient.builder().wrappedClient(s3AsyncClient)
             // this is required for doing S3 ranged GET calls
@@ -186,10 +212,8 @@ public class EncryptionS3ClientFactory extends DefaultS3ClientFactory {
   }
 
   private Class<? extends Keyring> getCustomKeyringProviderClass(String className) {
-    if (Strings.isNullOrEmpty(className)) {
-      throw new IllegalArgumentException(
-          "Custom Keyring class name is null or empty");
-    }
+    Preconditions.checkArgument(className !=null && !className.isEmpty(),
+        "Custom Keyring class name is null or empty");
     try {
       return Class.forName(className).asSubclass(Keyring.class);
     } catch (ClassNotFoundException e) {

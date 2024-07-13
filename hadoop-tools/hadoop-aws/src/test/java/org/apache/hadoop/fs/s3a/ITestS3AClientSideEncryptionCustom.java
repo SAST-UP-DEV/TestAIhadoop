@@ -30,6 +30,9 @@ import static org.apache.hadoop.fs.s3a.Constants.S3_ENCRYPTION_CSE_CUSTOM_KEYRIN
 import static org.apache.hadoop.fs.s3a.S3ATestUtils.skipIfEncryptionNotSet;
 import static org.apache.hadoop.fs.s3a.S3ATestUtils.skipIfEncryptionTestsDisabled;
 
+/**
+ * Tests to verify S3 client side encryption (CSE-CUSTOM).
+ */
 public class ITestS3AClientSideEncryptionCustom extends ITestS3AClientSideEncryption {
 
   private static final String KMS_KEY_WRAP_ALGO = "kms+context";

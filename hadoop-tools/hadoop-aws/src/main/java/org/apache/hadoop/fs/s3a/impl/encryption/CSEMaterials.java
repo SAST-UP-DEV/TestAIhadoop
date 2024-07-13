@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.fs.s3a.impl;
+package org.apache.hadoop.fs.s3a.impl.encryption;
 
 import org.apache.hadoop.conf.Configuration;
 
@@ -25,11 +25,18 @@ import org.apache.hadoop.conf.Configuration;
  * to be used for client side encryption.
  */
 public class CSEMaterials {
+
   /**
    * Enum for CSE key types.
    */
   public enum CSEKeyType {
+    /**
+     * AWS KMS keys are used of encryption and decryption.
+     */
     KMS,
+    /**
+     * Custom cryptographic manager class is used for encryption and decryption.
+     */
     CUSTOM
   }
 

@@ -84,7 +84,7 @@ public interface AWSHeaders {
   String CRYPTO_CEK_ALGORITHM = "x-amz-cek-alg";
 
   /**
-   * Header for unencrypted content length of an object.
+   * Header for unencrypted content length of an object: {@value}.
    */
   String UNENCRYPTED_CONTENT_LENGTH = "x-amz-unencrypted-content-length";
 

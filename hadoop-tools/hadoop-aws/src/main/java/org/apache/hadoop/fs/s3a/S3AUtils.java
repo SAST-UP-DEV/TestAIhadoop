@@ -24,7 +24,6 @@ import software.amazon.awssdk.core.exception.ApiCallAttemptTimeoutException;
 import software.amazon.awssdk.core.exception.ApiCallTimeoutException;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.retry.RetryUtils;
-import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.S3Object;
 
@@ -78,7 +77,6 @@ import static org.apache.commons.lang3.StringUtils.isEmpty;
 import static org.apache.hadoop.fs.s3a.AWSCredentialProviderList.maybeTranslateCredentialException;
 import static org.apache.hadoop.fs.s3a.Constants.*;
 import static org.apache.hadoop.fs.s3a.audit.AuditIntegration.maybeTranslateAuditException;
-import static org.apache.hadoop.fs.s3a.impl.CSEUtils.getUnencryptedObjectLength;
 import static org.apache.hadoop.fs.s3a.impl.ErrorTranslation.isUnknownBucket;
 import static org.apache.hadoop.fs.s3a.impl.InstantiationIOException.instantiationException;
 import static org.apache.hadoop.fs.s3a.impl.InstantiationIOException.isAbstract;
@@ -529,13 +527,8 @@ public final class S3AUtils {
    * @param owner owner of the file
    * @param eTag S3 object eTag or null if unavailable
    * @param versionId S3 object versionId or null if unavailable
-   * @param s3Client s3 client object
-   * @param isCSEEnabled is client side encryption enabled?
-   * @param bucket s3 bucket name
-   * @param cseRangedGetEnabled is ranged get enabled
-   * @param cseReadUnencryptedObjects is read unencrypted object enabled
+   * @param size s3 object size
    * @return a status entry
-   * @throws IOException IO failures
    */
   public static S3AFileStatus createFileStatus(Path keyPath,
       S3Object s3Object,
@@ -543,16 +536,7 @@ public final class S3AUtils {
       String owner,
       String eTag,
       String versionId,
-      S3Client s3Client,
-      boolean isCSEEnabled,
-      String bucket,
-      boolean cseRangedGetEnabled,
-      boolean cseReadUnencryptedObjects) throws IOException {
-    long size = s3Object.size();
-    if (isCSEEnabled) {
-      size = getUnencryptedObjectLength(s3Client, bucket, s3Object.key(), s3Object.size(),
-          null, cseRangedGetEnabled, cseReadUnencryptedObjects);
-    }
+      long size) {
     return createFileStatus(keyPath,
         objectRepresentsDirectory(s3Object.key()),
         size, Date.from(s3Object.lastModified()), blockSize, owner, eTag, versionId);

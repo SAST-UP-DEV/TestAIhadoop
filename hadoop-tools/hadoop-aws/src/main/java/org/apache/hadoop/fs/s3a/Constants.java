@@ -737,14 +737,16 @@ public final class Constants {
       "fs.s3a.encryption.key";
 
   /**
-   * Client side encryption (CSE-CUSTOM) with custom cryptographic material manager class name.
+   * Custom keyring class name for CSE-KMS.
+   * value:{@value}
    */
   public static final String S3_ENCRYPTION_CSE_CUSTOM_KEYRING_CLASS_NAME =
           "fs.s3a.encryption.cse.custom.keyring.class.name";
 
   /**
-   * This config initializes unencrypted s3 client will be used to access unencrypted
-   * s3 object. This is to provide backward compatibility.
+   * Config to support reading unencrypted s3 objects when CSE is enabled.
+   * This is to provide backward compatibility with V1/V2 client.
+   * value:{@value}
    */
   public static final String S3_ENCRYPTION_CSE_READ_UNENCRYPTED_OBJECTS =
           "fs.s3a.encryption.cse.read.unencrypted.objects";
@@ -759,7 +761,8 @@ public final class Constants {
    * This is to provide backward compatability with objects encrypted with V1 client.
    * Unlike V2 and V3 client which always pads 16 bytes, V1 client pads bytes till the
    * object size reaches next multiple of 16.
-   * * This is to provide backward compatibility.
+   * This is to provide backward compatibility with V1 client.
+   * value:{@value}
    */
   public static final String S3_ENCRYPTION_CSE_OBJECT_SIZE_FROM_RANGED_GET_ENABLED =
           "fs.s3a.encryption.cse.object.size.ranged.get.enabled";
@@ -770,10 +773,11 @@ public final class Constants {
   public static final boolean S3_ENCRYPTION_CSE_OBJECT_SIZE_FROM_RANGED_GET_ENABLED_DEFAULT = false;
 
   /**
-   * Config to control whether to skip file named with suffix
-   * {@link #S3_ENCRYPTION_CSE_INSTRUCTION_FILE_SUFFIX}. Encryption V1 client supports storing
-   * encryption metadata in an instruction file which should be skipped while listing for the files.
-   * This is to provide backward compatibility.
+   * Config to skip file named with suffix
+   * {@link #S3_ENCRYPTION_CSE_INSTRUCTION_FILE_SUFFIX}. V1/V2 client supports storing encryption
+   * metadata in an instruction file which should be skipped while listing for the files.
+   * This is to provide backward compatibility with V1/V2 client.
+   * value:{@value}
    */
   public static final String S3_ENCRYPTION_CSE_SKIP_INSTRUCTION_FILE =
       "fs.s3a.encryption.cse.skip.instruction.file";
