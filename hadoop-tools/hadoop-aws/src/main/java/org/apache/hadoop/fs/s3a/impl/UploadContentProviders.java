@@ -276,8 +276,7 @@ public final class UploadContentProviders {
         f.getChannel().position(offset);
         return f;
       });
-      setCurrentStream(new BufferedInputStream(fis));
-      return getCurrentStream();
+      return setCurrentStream(new BufferedInputStream(fis));
     }
 
     @Override

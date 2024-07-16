@@ -444,6 +444,12 @@ public class LoggingAuditor
     HttpReferrerAuditHeader getReferrer() {
       return referrer;
     }
+
+    @Override
+    public void onExecutionFailure(final Context.FailedExecution context,
+        final ExecutionAttributes executionAttributes) {
+      super.onExecutionFailure(context, executionAttributes);
+    }
   }
 
   /**
@@ -522,4 +528,5 @@ public class LoggingAuditor
       super.beforeExecution(context, executionAttributes);
     }
   }
+
 }
