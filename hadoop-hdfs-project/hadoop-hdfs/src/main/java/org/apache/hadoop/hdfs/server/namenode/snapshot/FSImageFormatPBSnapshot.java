@@ -531,7 +531,8 @@ public class FSImageFormatPBSnapshot {
         }
         if (i % parent.getInodesPerSubSection() == 0) {
           parent.commitSubSection(headers,
-              FSImageFormatProtobuf.SectionName.SNAPSHOT_DIFF_SUB);
+                  FSImageFormatProtobuf.SectionName.SNAPSHOT_DIFF_SUB);
+          out = parent.getSectionOutputStream();
         }
       }
       parent.commitSectionAndSubSection(headers,
