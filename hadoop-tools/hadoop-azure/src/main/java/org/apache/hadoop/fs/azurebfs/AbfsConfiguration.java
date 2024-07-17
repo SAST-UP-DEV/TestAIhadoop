@@ -86,6 +86,7 @@ public class AbfsConfiguration{
 
   private final Configuration rawConfig;
   private final String accountName;
+  private final String primaryAccountName;
   private final boolean isSecure;
   private static final Logger LOG = LoggerFactory.getLogger(AbfsConfiguration.class);
 
@@ -398,6 +399,11 @@ public class AbfsConfiguration{
     this.rawConfig = ProviderUtils.excludeIncompatibleCredentialProviders(
         rawConfig, AzureBlobFileSystem.class);
     this.accountName = accountName;
+    if (accountName.contains("-secondary")) {
+      this.primaryAccountName = accountName.replace("-secondary", "");
+    } else {
+      this.primaryAccountName = accountName;
+    }
     this.isSecure = getBoolean(FS_AZURE_SECURE_MODE, false);
 
     Field[] fields = this.getClass().getDeclaredFields();
@@ -430,6 +436,16 @@ public class AbfsConfiguration{
   public String getAccountName() {
     return accountName;
   }
+
+  /**
+   * Gets the Azure Storage account primary name corresponding to this instance of configuration.
+   *
+   * @return the Azure Storage primary account name
+   */
+  public String getPrimaryAccountName() {
+    return primaryAccountName;
+  }
+
 
   /**
    * Gets client correlation ID provided in config.
