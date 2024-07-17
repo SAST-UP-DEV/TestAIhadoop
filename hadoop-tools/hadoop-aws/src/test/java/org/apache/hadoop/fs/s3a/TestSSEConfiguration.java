@@ -29,6 +29,7 @@ import org.junit.rules.TemporaryFolder;
 import org.junit.rules.Timeout;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.s3a.impl.S3AEncryption;
 import org.apache.hadoop.security.ProviderUtils;
 import org.apache.hadoop.security.alias.CredentialProvider;
 import org.apache.hadoop.security.alias.CredentialProviderFactory;
@@ -182,11 +183,11 @@ public class TestSSEConfiguration extends Assert {
    * and key.
    * @param algorithm  algorithm to use, may be null
    * @param key key, may be null
-   * @param context encryption context, may be null
+   * @param encryptionContext encryption context, may be null
    * @return the new config.
    */
   @SuppressWarnings("deprecation")
-  private Configuration buildConf(String algorithm, String key, String context) {
+  private Configuration buildConf(String algorithm, String key, String encryptionContext) {
     Configuration conf = emptyConf();
     if (algorithm != null) {
       conf.set(Constants.S3_ENCRYPTION_ALGORITHM, algorithm);
@@ -200,8 +201,8 @@ public class TestSSEConfiguration extends Assert {
       conf.unset(SERVER_SIDE_ENCRYPTION_KEY);
       conf.unset(Constants.S3_ENCRYPTION_KEY);
     }
-    if (context != null) {
-      conf.set(S3_ENCRYPTION_CONTEXT, context);
+    if (encryptionContext != null) {
+      conf.set(S3_ENCRYPTION_CONTEXT, encryptionContext);
     } else {
       conf.unset(S3_ENCRYPTION_CONTEXT);
     }
@@ -329,14 +330,14 @@ public class TestSSEConfiguration extends Assert {
   public void testSSEEmptyEncryptionContext() throws Throwable {
     // test the internal logic of the test setup code
     Configuration c = buildConf(SSE_KMS.getMethod(), "kmskey", "");
-    assertEquals("", getS3EncryptionContext(BUCKET, c));
+    assertEquals("", S3AEncryption.getS3EncryptionContext(BUCKET, c));
   }
 
   @Test
   public void testSSEEncryptionContextNull() throws Throwable {
     // test the internal logic of the test setup code
     final Configuration c = buildConf(SSE_KMS.getMethod(), "kmskey", null);
-    assertEquals("", getS3EncryptionContext(BUCKET, c));
+    assertEquals("", S3AEncryption.getS3EncryptionContext(BUCKET, c));
   }
 
   @Test

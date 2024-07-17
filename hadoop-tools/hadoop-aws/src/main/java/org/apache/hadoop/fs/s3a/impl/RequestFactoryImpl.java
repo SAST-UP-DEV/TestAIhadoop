@@ -270,6 +270,8 @@ public class RequestFactoryImpl implements RequestFactory {
       LOG.debug("Propagating SSE-KMS settings from source {}",
           sourceKMSId);
       copyObjectRequestBuilder.ssekmsKeyId(sourceKMSId);
+      EncryptionSecretOperations.getSSEAwsKMSEncryptionContext(encryptionSecrets)
+          .ifPresent(copyObjectRequestBuilder::ssekmsEncryptionContext);
       return;
     }
 

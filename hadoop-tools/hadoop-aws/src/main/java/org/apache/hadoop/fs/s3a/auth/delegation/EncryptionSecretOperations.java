@@ -71,7 +71,6 @@ public final class EncryptionSecretOperations {
   public static Optional<String> getSSEAwsKMSEncryptionContext(final EncryptionSecrets secrets) {
     if ((secrets.getEncryptionMethod() == S3AEncryptionMethods.SSE_KMS
         || secrets.getEncryptionMethod() == S3AEncryptionMethods.DSSE_KMS)
-        && secrets.hasEncryptionKey()
         && secrets.hasEncryptionContext()) {
       return Optional.of(secrets.getEncryptionContext());
     } else {
