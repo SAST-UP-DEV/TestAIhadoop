@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.qjournal.server;
 import java.net.InetSocketAddress;
 import java.net.URISyntaxException;
 import java.util.function.Supplier;
+import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
@@ -75,6 +76,7 @@ public class TestJournalNodeSync {
     conf = new HdfsConfiguration();
     conf.setBoolean(DFSConfigKeys.DFS_JOURNALNODE_ENABLE_SYNC_KEY, true);
     conf.setLong(DFSConfigKeys.DFS_JOURNALNODE_SYNC_INTERVAL_KEY, 1000L);
+    conf.setBoolean(DFSConfigKeys.DFS_JOURNALNODE_ENABLE_SYNC_FORMAT_KEY, true);
     if (testName.getMethodName().equals(
         "testSyncAfterJNdowntimeWithoutQJournalQueue")) {
       conf.setInt(DFSConfigKeys.DFS_QJOURNAL_QUEUE_SIZE_LIMIT_KEY, 0);
@@ -478,6 +480,32 @@ public class TestJournalNodeSync {
     }
   }
 
+  @Test(timeout=900_000)
+  public void testFormatWithSyncer() throws Exception {
+    File firstJournalDir = jCluster.getJournalDir(0, jid);
+    File firstJournalCurrentDir = new StorageDirectory(firstJournalDir)
+        .getCurrentDir();
+
+    // Generate some edit logs
+    long firstTxId = generateEditLog();
+
+    // Delete them from the JN01
+    List<File> missingLogs = Lists.newArrayList();
+    missingLogs.add(deleteEditLog(firstJournalCurrentDir, firstTxId));
+
+    // Delete the storage directory itself to simulate a disk wipe
+    // and ensure that the in-memory formatting state of JNStorage gets updated
+    FileUtils.deleteDirectory(firstJournalDir);
+    jCluster.getJournalNode(0).getOrCreateJournal(jid).getStorage().analyzeStorage();
+
+    // Wait for JN formatting with Syncer
+    GenericTestUtils.waitFor(jnFormatted(0), 500, 90000);
+    // Generate some more edit log so that the JN updates its committed tx id
+    generateEditLog();
+    // Check that the missing edit logs have been synced
+    GenericTestUtils.waitFor(editLogExists(missingLogs), 500, 90000);
+  }
+
   private File deleteEditLog(File currentDir, long startTxId)
       throws IOException {
     EditLogFile logFile = getLogFile(currentDir, startTxId);
@@ -577,6 +605,21 @@ public class TestJournalNodeSync {
           }
         }
         return true;
+      }
+    };
+    return supplier;
+  }
+
+  private Supplier<Boolean> jnFormatted(int jnIndex) throws Exception {
+    Supplier<Boolean> supplier = new Supplier<Boolean>() {
+      @Override
+      public Boolean get() {
+        try {
+          return jCluster.getJournalNode(jnIndex).getOrCreateJournal(jid)
+              .isFormatted();
+        } catch (Exception e) {
+          return false;
+        }
       }
     };
     return supplier;
